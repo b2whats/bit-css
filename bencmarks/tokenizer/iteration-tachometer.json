@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Polymer/tachometer/master/config.schema.json",
+  "root": "../..",
+  "sampleSize": 50,
+  "timeout": 0,
+  "autoSampleConditions": [
+    "0ms"
+  ],
+  "benchmarks": [
+    {
+      "expand": [{
+        "name": "iteration string",
+        "url": "iteration.html?test=string"
+      },{
+        "name": "iteration binary encodeInto",
+        "url": "iteration.html?test=binary-encodeInto"
+      },{
+        "name": "iteration optimize",
+        "url": "iteration.html?test=optimize"
+      },{
+        "name": "iteration scanner",
+        "url": "iteration.html?test=scanner"
+      },{
+        "name": "iteration regexp",
+        "url": "iteration.html?test=regexp"
+      }],
+      "browser": {
+        "name": "chrome",
+        "headless": true
+      }
+    }
+  ]
+}

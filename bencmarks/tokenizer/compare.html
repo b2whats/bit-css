@@ -1,0 +1,181 @@
+<script type="module">
+    import * as bench from 'tachometer/client/lib/bench.js'
+    import { Tokenizer } from '../../src/tokenizer-test.js'
+    import { fixture } from './fixture.js'
+
+    const test = new URLSearchParams(window.location.search).get('test')
+    let Scanner
+    
+    switch (test) {
+      case 'typed-array-buffer': {
+        const maps = new DataView(new Uint8Array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,3,0,4,0,4,3,4,4,4,4,4,4,4,4,1,1,1,1,1,1,1,1,1,1,4,0,4,4,4,0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,0,4,0,2,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,0,0]).buffer)
+        Scanner = class BinaryTokenizer extends Tokenizer {
+          constructor(source) {
+            super(source)
+          }
+
+          isIdentifier(charCode = this.charCode) { return (
+            maps.getUint8(charCode) === 2
+          )}
+
+          isNumber(charCode = this.charCode) { return (
+            maps.getUint8(charCode) === 1
+          )}
+
+          isQuote(charCode = this.charCode) { return maps.getUint8(charCode) === 3 }
+
+          isOperator(charCode = this.charCode) { return (
+            maps.getUint8(charCode) === 4
+          )}
+        }
+
+        break
+      }
+      case 'typed-array': {
+        const maps = new Uint8Array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,3,0,4,0,4,3,4,4,4,4,4,4,4,4,1,1,1,1,1,1,1,1,1,1,4,0,4,4,4,0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,0,4,0,2,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,0,0])
+        Scanner = class BinaryTokenizer extends Tokenizer {
+          constructor(source) {
+            super(source)
+          }
+
+          isIdentifier(charCode = this.charCode) { return (
+            maps[charCode] === 2
+          )}
+
+          isNumber(charCode = this.charCode) { return (
+            maps[charCode] === 1
+          )}
+
+          isQuote(charCode = this.charCode) { return maps[charCode] === 3 }
+
+          isOperator(charCode = this.charCode) { return (
+            maps[charCode] === 4
+          )}
+        }
+
+        break
+      }
+      case 'array': {
+        const maps = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,3,0,4,0,4,3,4,4,4,4,4,4,4,4,1,1,1,1,1,1,1,1,1,1,4,0,4,4,4,0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,0,4,0,2,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,0,0]
+        Scanner = class BinaryTokenizer extends Tokenizer {
+          constructor(source) {
+            super(source)
+          }
+
+          isIdentifier(charCode = this.charCode) { return (
+            maps[charCode] === 2
+          )}
+
+          isNumber(charCode = this.charCode) { return (
+            maps[charCode] === 1
+          )}
+
+          isQuote(charCode = this.charCode) { return maps[charCode] === 3 }
+
+          isOperator(charCode = this.charCode) { return (
+            maps[charCode] === 4
+          )}
+        }
+
+        break
+      }
+      case 'map': {
+        const quote = new Map([[34, true], [39, true]])
+        const operator = new Map([[33, true], [38, true], [40, true], [41, true], [42, true], [43, true], [44, true], [45, true], [46, true], [47, true], [58, true], [60, true], [61, true], [62, true], [91, true], [93, true], [123, true], [124, true], [125, true]])
+        const number = new Map([[48, true], [49, true], [50, true], [51, true], [52, true], [53, true], [54, true], [55, true], [56, true], [57, true]])
+        const identifier = new Map([[97, true], [98, true], [99, true], [100, true], [101, true], [102, true], [103, true], [104, true], [105, true], [106, true], [107, true], [108, true], [109, true], [110, true], [111, true], [112, true], [113, true], [114, true], [115, true], [116, true], [117, true], [118, true], [119, true], [120, true], [121, true], [122, true], [65, true], [66, true], [67, true], [68, true], [69, true], [70, true], [71, true], [72, true], [73, true], [74, true], [75, true], [76, true], [77, true], [78, true], [79, true], [80, true], [81, true], [82, true], [83, true], [84, true], [85, true], [86, true], [87, true], [88, true], [89, true], [90, true], [36, true], [95, true]])
+        Scanner = class BinaryTokenizer extends Tokenizer {
+          constructor(source) {
+            super(source)
+          }
+
+          isIdentifier(charCode = this.charCode) { return (
+            identifier.has(charCode)
+          )}
+
+          isNumber(charCode = this.charCode) { return (
+            number.has(charCode)
+          )}
+
+          isQuote(charCode = this.charCode) { return quote.has(charCode) }
+
+          isOperator(charCode = this.charCode) { return (
+            operator.has(charCode)
+          )}
+        }
+
+        break
+      }
+      case 'set': {
+        const quote = new Set([34, 39])
+        const operator = new Set([33, 38, 40, 41, 42, 43, 44, 45, 46, 47, 58, 60, 61, 62, 91, 93, 123, 124, 125])
+        const number = new Set([48, 49, 50, 51, 52, 53, 54, 55, 56, 57])
+        const identifier = new Set([97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 36, 95])
+        Scanner = class BinaryTokenizer extends Tokenizer {
+          constructor(source) {
+            super(source)
+          }
+
+          isIdentifier(charCode = this.charCode) { return (
+            identifier.has(charCode)
+          )}
+
+          isNumber(charCode = this.charCode) { return (
+            number.has(charCode)
+          )}
+
+          isQuote(charCode = this.charCode) { return quote.has(charCode) }
+
+          isOperator(charCode = this.charCode) { return (
+            operator.has(charCode)
+          )}
+        }
+
+        break
+      }
+      case 'hex': {
+        Scanner = class BinaryTokenizer extends Tokenizer {
+          constructor(source) {
+            super(source)
+          }
+
+          isIdentifier(charCode = this.charCode) { return (
+            (charCode === 0x24 || charCode === 0x5F) || // $ _
+            (charCode > 0x40 && charCode < 0x5B) ||     // A-Z
+            (charCode > 0x60 && charCode < 0x7B)       // a-z
+          )}
+
+          isDot(charCode = this.charCode) { return charCode === 0x2E }
+
+          isNumber(charCode = this.charCode) { return (
+            charCode > 0x2F && charCode < 0x3A // 0-9
+          )}
+
+          isQuote(charCode = this.charCode) { return charCode === 0x22 || charCode === 0x27 }
+
+          isOperator(charCode = this.charCode) { return (
+            (charCode === 0x21) ||                     // !
+            (charCode === 0x26) ||                     // &
+            (charCode > 0x27 && charCode < 0x30) ||      // ( ) * + , - . /
+            (charCode === 0x3A) ||                     // :
+            (charCode > 0x3B && charCode < 0x3F) ||      // < = >
+            (charCode === 0x5B || charCode === 0x5D) ||  // [ ]
+            (charCode > 0x7A && charCode < 0x7E)       // { | }
+          )}
+        }
+
+        break
+      }
+      case 'number': {
+        Scanner = Tokenizer
+        break
+      }
+    }
+
+    bench.start();
+    for (let i = 0; i < 100; i++) {
+      const scanner = new Scanner(fixture)
+      scanner.tokens()
+    }
+    bench.stop();
+</script>

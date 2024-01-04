@@ -1,0 +1,332 @@
+<script type="module">
+    import { unpack, pack } from 'msgpackr';
+    import * as bench from 'tachometer/client/lib/bench.js'
+    import { Tokenizer } from '../../src/tokenizer-test.js'
+    import { Scanner } from '../../src/scanner.js'
+    import { fixture, fixture2 } from './fixture.js'
+
+    const test = new URLSearchParams(window.location.search).get('test')
+    let ScannerSource
+    
+    function utf8_write(string, buffer) {
+      for (var i = 0; i < string.length; ++i) {
+          buffer[i] = string.charCodeAt(i)
+      }
+      return buffer
+    }
+
+    function utf8_write2(string, buffer) {
+      for (var i = 0; i < string.length; i += 3) {
+          buffer[i] = string.charCodeAt(i)
+          buffer[i+1] = string.charCodeAt(i+1)
+          buffer[i+2] = string.charCodeAt(i+2)
+      }
+      return buffer
+    }
+
+    function utf8_read(buffer, start, end) {
+        if (end - start < 1) {
+            return "";
+        }
+
+        var str = "";
+        for (var i = start; i < end;) {
+            str += String.fromCharCode(buffer[i++])
+        }
+
+        return str;
+    }
+
+    const read = [
+      (buffer, start) => String.fromCharCode(buffer[start]),
+      (buffer, start) => String.fromCharCode(buffer[start]),
+      (buffer, start) => String.fromCharCode(buffer[start], buffer[start + 1]),
+      (buffer, start) => String.fromCharCode(buffer[start], buffer[start + 1], buffer[start + 2]),
+      (buffer, start) => String.fromCharCode(buffer[start], buffer[start + 1], buffer[start + 2], buffer[start + 3]),
+      (buffer, start) => String.fromCharCode(buffer[start], buffer[start + 1], buffer[start + 2], buffer[start + 3], buffer[start + 4]),
+      (buffer, start) => String.fromCharCode(buffer[start], buffer[start + 1], buffer[start + 2], buffer[start + 3], buffer[start + 4], buffer[start + 5]),
+      (buffer, start) => String.fromCharCode(buffer[start], buffer[start + 1], buffer[start + 2], buffer[start + 3], buffer[start + 4], buffer[start + 5], buffer[start+ 6]),
+      (buffer, start) => String.fromCharCode(buffer[start], buffer[start + 1], buffer[start + 2], buffer[start + 3], buffer[start + 4], buffer[start + 5], buffer[start+ 6], buffer[start + 7]),
+      (buffer, start) => String.fromCharCode(buffer[start], buffer[start + 1], buffer[start + 2], buffer[start + 3], buffer[start + 4], buffer[start + 5], buffer[start+ 6], buffer[start + 7], buffer[start + 8])
+    ]
+
+    function utf8_read2(buffer, start, end) {
+        const length = end - start
+        if (length < 1) {
+            return "";
+        }
+
+        if (length < 10) {
+          return read[length](buffer, start)
+        }
+    
+        var str = "";
+        for (var i = start; i < end;) {
+            str += String.fromCharCode(buffer[i++])
+        }
+
+        return str;
+    }
+    
+    switch (test) {
+      case 'binary-msgpackr': {
+        ScannerSource = class BinaryTokenizer extends Tokenizer {
+          constructor(source) {
+            super(source)
+
+            this.buffer = pack(source)
+          }
+
+          next() { return this.charCode = this.buffer[++this.cursor] }
+          peek(shift) { return this.buffer[this.cursor + shift] }
+          slice(start, end = this.cursor) { return String.fromCharCode.apply(null, this.buffer.slice(start, end)) }
+        }
+
+        break
+      }
+      case 'binary-custom': {
+        ScannerSource = class BinaryTokenizer extends Tokenizer {
+          static buffer = new Uint8Array(132000)
+
+          constructor(source) {
+            super(source)
+
+            this.buffer = BinaryTokenizer.buffer
+            utf8_write(source, this.buffer)
+          }
+
+          next() { return this.charCode = this.buffer[++this.cursor] }
+          peek(shift) { return this.buffer[this.cursor + shift] }
+          slice(start, end = this.cursor) { return utf8_read(this.buffer, start, end) }
+          // slice(start, end = this.cursor) { return this.buffer.slice(start, end).toString() } 
+          // slice(start, end = this.cursor) { return this.buffer.subarray(start, end) } 
+        }
+
+        break
+      }
+      case 'binary-custom2': {
+        ScannerSource = class BinaryTokenizer extends Tokenizer {
+          static buffer = new Uint8Array(132000)
+
+          constructor(source) {
+            super(source)
+
+            this.buffer = BinaryTokenizer.buffer
+            utf8_write2(source, this.buffer)
+          }
+
+          next() { return this.charCode = this.buffer[++this.cursor] }
+          peek(shift) { return this.buffer[this.cursor + shift] }
+          slice(start, end = this.cursor) { return utf8_read2(this.buffer, start, end) }
+          // slice(start, end = this.cursor) { return this.buffer.slice(start, end).toString() } 
+          // slice(start, end = this.cursor) { return this.buffer.subarray(start, end) } 
+        }
+
+        break
+      }
+      case 'binary-encodeInto': {
+        ScannerSource = class BinaryTokenizer extends Tokenizer {
+          static textEncoder = new TextEncoder()
+          static buffer = new Uint8Array(132000)
+
+          constructor(source) {
+            super(source)
+
+            this.buffer = BinaryTokenizer.buffer
+            BinaryTokenizer.textEncoder.encodeInto(source, this.buffer)
+          }
+
+          next() { return this.charCode = this.buffer[++this.cursor] }
+          peek(shift) { return this.buffer[this.cursor + shift] }
+
+
+        }
+
+        break
+      }
+      case 'optimize': {
+     // const maps = new Uint8Array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,3,0,4,0,4,3,4,4,4,4,4,4,4,4,1,1,1,1,1,1,1,1,1,1,4,0,4,4,4,0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,0,4,0,2,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,0,0])
+        const maps = new Uint8Array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,4,0,1,0,3,4,3,3,0,0,3,3,3,0,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,0,3,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,3,3,0,0])
+        
+        ScannerSource = class BinaryTokenizer extends Tokenizer {
+          static textEncoder = new TextEncoder()
+          static buffer = new Uint8Array(0)
+          static allocateBuffer = (length) => {
+            if (BinaryTokenizer.buffer.byteLength < length) {
+              BinaryTokenizer.buffer = new Uint8Array(length)
+            }
+            return BinaryTokenizer.buffer
+          }
+
+          keyword = new RegExp('null|true|false')
+          
+          constructor(source) {
+            super(source)
+            this.buffer = BinaryTokenizer.allocateBuffer(source.length)
+            BinaryTokenizer.textEncoder.encodeInto(source, this.buffer)
+            this.charCode = this.buffer[0]
+          }
+
+          next(cursor = ++this.cursor) { return this.charCode = this.buffer[cursor] }
+          peek(shift) { return this.buffer[this.cursor + shift] }
+
+          isIdentifier(charCode = this.charCode) { return maps[charCode] === 1 }
+
+          isNumber(charCode = this.charCode) { return maps[charCode] === 2 }
+
+          isQuote(charCode = this.charCode) { return maps[charCode] === 4 }
+
+          isOperator(charCode = this.charCode) { return maps[charCode] === 3 }
+
+          identifier() {
+            const startPosition = this.cursor
+          
+            do this.next()
+            while (this.isIdentifier() || this.isNumber())
+        
+            const value = this.slice(startPosition)
+        
+            return {
+              type: this.keyword.exec(value) !== null ? value :  'Identifier',
+              value
+            }
+          }
+
+          nextToken() {
+            while(this.isScanning()) {
+              switch (maps[this.charCode]) {
+                case 1: return this.identifier()
+                case 2: return this.numberLiteral()
+                case 3: return this.operator()
+                case 4: return this.stringLiteral()
+                default: this.next()
+              }
+            }
+        
+            return null
+          }
+        }
+
+        break
+      }
+      case 'regexp': {
+        const maps = new Uint8Array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,3,0,4,0,4,3,4,4,4,4,4,4,4,4,1,1,1,1,1,1,1,1,1,1,4,0,4,4,4,0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,0,4,0,2,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,0,0])
+
+        ScannerSource = class BinaryTokenizer extends Tokenizer {
+          static textEncoder = new TextEncoder()
+          static buffer = new Uint8Array(132000)
+
+          constructor(source) {
+            super(source)
+
+            this.reIdentifier = new RegExp('[\\w$]+', 'y')
+            this.reOperator = new RegExp('(&&|\\|\\||>=|=|<=|==|!=|!|\\(|\\)|\\*|\\+|,|-|\\.|/|:|<|>|\\[|\\]|{|})', 'y')
+            this.buffer = BinaryTokenizer.buffer
+            BinaryTokenizer.textEncoder.encodeInto(source, this.buffer)
+            this.charCode = this.buffer[0]
+          }
+
+          next() { return this.charCode = this.buffer[++this.cursor] }
+          peek(shift) { return this.buffer[this.cursor + shift] }
+
+          isIdentifier(charCode = this.charCode) { return maps[charCode] === 2 }
+
+          isNumber(charCode = this.charCode) { return maps[charCode] === 1 }
+
+          isQuote(charCode = this.charCode) { return maps[charCode] === 3 }
+
+          isOperator(charCode = this.charCode) { return maps[charCode] === 4 }
+
+          identifier() {
+            this.reIdentifier.lastIndex = this.cursor
+
+            const search = this.reIdentifier.exec(this.source)
+            if (search !== null) {
+              const value = search[0]
+              this.cursor += value.length
+              this.charCode = this.buffer[this.cursor]
+
+              return {
+                type: this.keyword.get(value) || 'Identifier',
+                value
+              }
+            } else {
+              return null
+            }
+          }
+          operator() {
+            this.reOperator.lastIndex = this.cursor
+
+            const search = this.reOperator.exec(this.source)
+            if (search !== null) {
+              const value = search[0]
+              this.cursor += value.length
+              this.charCode = this.buffer[this.cursor]
+
+              return { type: value, value }
+            } else {
+              return null
+            }
+          }
+
+          nextToken() {
+            if (this.isScanning()) {
+              switch (maps[this.charCode]) {
+                case 2: return this.identifier()
+                case 1: return this.numberLiteral()
+                case 4: return this.operator()
+                case 3: return this.stringLiteral()
+                default: return (this.next(), this.nextToken())
+              }
+            }
+        
+            return null
+          }
+        }
+
+        break
+      }
+      case 'binary': {
+        ScannerSource = class BinaryTokenizer extends Tokenizer {
+          static textEncoder = new TextEncoder()
+
+          constructor(source) {
+            super(source)
+            this.buffer = BinaryTokenizer.textEncoder.encode(source)
+          }
+
+          next() { return this.charCode = this.buffer[++this.cursor] }
+          peek(shift) { return this.buffer[this.cursor + shift] }
+        }
+
+        break
+      }
+      case 'string': {
+        ScannerSource = Tokenizer
+        break
+      }
+    }
+
+    // console.log(new ScannerSource(fixture).tokens())
+    if (test === 'scanner') {
+      bench.start();
+      const scanner = new Scanner()
+      for (let i = 0; i < 50; i++) {
+        scanner.init(fixture)
+        scanner.tokens()
+        scanner.init(fixture2)
+        scanner.tokens()
+      }
+      bench.stop();
+    } else {
+      bench.start();
+      for (let i = 0; i < 50; i++) {
+        const scanner = new ScannerSource(fixture)
+        scanner.tokens()
+        const scanner2 = new ScannerSource(fixture2)
+        scanner2.tokens()
+      }
+      bench.stop();
+    }
+
+</script>

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Polymer/tachometer/master/config.schema.json",
+  "root": "../..",
+  "sampleSize": 50,
+  "timeout": 0,
+  "autoSampleConditions": [
+    "0ms"
+  ],
+  "benchmarks": [
+    {
+      "expand": [{
+        "name": "compare hex",
+        "url": "compare.html?test=hex"
+      },{
+        "name": "compare number",
+        "url": "compare.html?test=number"
+      },{
+        "name": "compare array",
+        "url": "compare.html?test=array"
+      },{
+        "name": "compare typed-array",
+        "url": "compare.html?test=typed-array"
+      },{
+        "name": "compare typed-array-buffer",
+        "url": "compare.html?test=typed-array-buffer"
+      }],
+      "browser": {
+        "name": "chrome",
+        "headless": true
+      }
+    }
+  ]
+}

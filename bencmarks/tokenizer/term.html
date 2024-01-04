@@ -1,0 +1,198 @@
+<script type="module">
+    import * as bench from 'tachometer/client/lib/bench.js'
+    import { Literal as L, Identifier as I, Ex } from '../../src/term.js'
+    import { loop } from './utils.js'
+
+    const test = new URLSearchParams(window.location.search).get('test') !== null
+    const debug = new URLSearchParams(window.location.search).get('debug') !== null
+
+    const testData = () => [
+        [ 'Literal/Identifier' ],
+        [ 'A', I('A'), 'A' ],
+        [ '!A', I('A').negate(), '¬A' ],
+        [ 'text', L('text'), 'text' ],
+        [ '!text', L('text').negate(), 'text' ],
+        [ 'true', L('true'), 'true' ],
+        [ '!true', L('true').negate(), '¬true' ],
+        [ 'false', L('false'), 'false' ],
+        [ '!false', L('false').negate(), '¬false' ],
+        [ '1', L('1'), '1' ],
+        [ '-1', L('1').negate(), '-1' ],
+        [ 'Operators' ], 
+        [ 'A || B', Ex('||', I('A'), I('B')), 'A ⋁ B' ],
+        [ 'A && B', Ex('&&', I('A'), I('B')), 'A ∧ B' ],
+        [ 'A == B', Ex('==', I('A'), I('B')), 'A ≡ B' ],
+        [ 'A != B', Ex('!=', I('A'), I('B')), 'A ≠ B' ],
+        [ 'A > B',  Ex('>',  I('A'), I('B')), 'A ⋗ B' ],
+        [ 'A < B',  Ex('<',  I('A'), I('B')), 'A ⋖ B' ],
+        [ 'A >= B', Ex('>=', I('A'), I('B')), 'A ⋝ B' ],
+        [ 'A <= B', Ex('<=', I('A'), I('B')), 'A ⋜ B' ],
+        [ 'Negate operators' ], 
+        [ '!(A || B)', Ex('||', I('A'), I('B')).negate(), '¬(A ⋁ B)' ],
+        [ '!(A && B)', Ex('&&', I('A'), I('B')).negate(), '¬(A ∧ B)' ],
+        [ '!(A == B)', Ex('==', I('A'), I('B')).negate(), '¬(A ≡ B)' ],
+        [ '!(A != B)', Ex('!=', I('A'), I('B')).negate(), '¬(A ≠ B)' ],
+        [ '!(A > B)',  Ex('>',  I('A'), I('B')).negate(), '¬(A ⋗ B)' ],
+        [ '!(A < B)',  Ex('<',  I('A'), I('B')).negate(), '¬(A ⋖ B)' ],
+        [ '!(A >= B)', Ex('>=', I('A'), I('B')).negate(), '¬(A ⋝ B)' ],
+        [ '!(A <= B)', Ex('<=', I('A'), I('B')).negate(), '¬(A ⋜ B)' ],
+        [ 'Negate operators to NNF' ], 
+        [ '!(A || B)', Ex('||', I('A'), I('B')).negate().toNNF(), '¬A ∧ ¬B' ],
+        [ '!(A && B)', Ex('&&', I('A'), I('B')).negate().toNNF(), '¬A ⋁ ¬B' ],
+        [ '!(A == B)', Ex('==', I('A'), I('B')).negate().toNNF(), 'A ≠ B' ],
+        [ '!(A != B)', Ex('!=', I('A'), I('B')).negate().toNNF(), 'A ≡ B' ],
+        [ '!(A > B)',  Ex('>',  I('A'), I('B')).negate().toNNF(), 'A ⋜ B' ],
+        [ '!(A < B)',  Ex('<',  I('A'), I('B')).negate().toNNF(), 'A ⋝ B' ],
+        [ '!(A >= B)', Ex('>=', I('A'), I('B')).negate().toNNF(), 'A ⋖ B' ],
+        [ '!(A <= B)', Ex('<=', I('A'), I('B')).negate().toNNF(), 'A ⋗ B' ],
+        [ 'Operators to CNF' ], 
+        [ 'A || B', Ex('||', I('A'), I('B')).toCNF(), 'A ⋁ B' ],
+        [ 'A && B', Ex('&&', I('A'), I('B')).toCNF(), 'A ∧ B' ],
+        [ 'A == B', Ex('==', I('A'), I('B')).toCNF(), 'A ≡ B' ],
+        [ 'A != B', Ex('!=', I('A'), I('B')).toCNF(), 'A ≠ B' ],
+        [ 'A > B',  Ex('>',  I('A'), I('B')).toCNF(), 'A ⋗ B' ],
+        [ 'A < B',  Ex('<',  I('A'), I('B')).toCNF(), 'A ⋖ B' ],
+        [ 'A >= B', Ex('>=', I('A'), I('B')).toCNF(), 'A ⋝ B' ],
+        [ 'A <= B', Ex('<=', I('A'), I('B')).toCNF(), 'A ⋜ B' ],
+        [ 'Operators to DNF' ], 
+        [ 'A || B', Ex('||', I('A'), I('B')).toDNF(), 'A ⋁ B' ],
+        [ 'A && B', Ex('&&', I('A'), I('B')).toDNF(), 'A ∧ B' ],
+        [ 'A == B', Ex('==', I('A'), I('B')).toDNF(), 'A ≡ B' ],
+        [ 'A != B', Ex('!=', I('A'), I('B')).toDNF(), 'A ≠ B' ],
+        [ 'A > B',  Ex('>',  I('A'), I('B')).toDNF(), 'A ⋗ B' ],
+        [ 'A < B',  Ex('<',  I('A'), I('B')).toDNF(), 'A ⋖ B' ],
+        [ 'A >= B', Ex('>=', I('A'), I('B')).toDNF(), 'A ⋝ B' ],
+        [ 'A <= B', Ex('<=', I('A'), I('B')).toDNF(), 'A ⋜ B' ],
+        [ 'Operators triple terms' ], 
+        [ 'A || B || C', Ex('||', Ex('||', I('A'), I('B')), I('C')), 'A ⋁ B ⋁ C' ],
+        [ 'A && B && C', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), 'A ∧ B ∧ C' ],
+        [ 'A == B == C', Ex('==', Ex('==', I('A'), I('B')), I('C')), 'A ≡ B ≡ C' ],
+        [ 'A != B != C', Ex('!=', Ex('!=', I('A'), I('B')), I('C')), 'A ≠ B ≠ C' ],
+        [ 'A > B > C',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')), 'A ⋗ B ⋗ C' ],
+        [ 'A < B < C',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')), 'A ⋖ B ⋖ C' ],
+        [ 'A >= B >= C', Ex('>=', Ex('>=', I('A'), I('B')), I('C')), 'A ⋝ B ⋝ C' ],
+        [ 'A <= B <= C', Ex('<=', Ex('<=', I('A'), I('B')), I('C')), 'A ⋜ B ⋜ C' ],
+        [ 'Negate operators triple terms' ], 
+        [ '!(A || B || C)', Ex('||', Ex('||', I('A'), I('B')), I('C')).negate(), '¬(A ⋁ B ⋁ C)' ],
+        [ '!(A && B && C)', Ex('&&', Ex('&&', I('A'), I('B')), I('C')).negate(), '¬(A ∧ B ∧ C)' ],
+        [ '!(A == B == C)', Ex('==', Ex('==', I('A'), I('B')), I('C')).negate(), '¬(A ≡ B ≡ C)' ],
+        [ '!(A != B != C)', Ex('!=', Ex('!=', I('A'), I('B')), I('C')).negate(), '¬(A ≠ B ≠ C)' ],
+        [ '!(A > B > C)',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')).negate(), '¬(A ⋗ B ⋗ C)' ],
+        [ '!(A < B < C)',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')).negate(), '¬(A ⋖ B ⋖ C)' ],
+        [ '!(A >= B >= C)', Ex('>=', Ex('>=', I('A'), I('B')), I('C')).negate(), '¬(A ⋝ B ⋝ C)' ],
+        [ '!(A <= B <= C)', Ex('<=', Ex('<=', I('A'), I('B')), I('C')).negate(), '¬(A ⋜ B ⋜ C)' ],
+        [ 'Negate operators triple terms to NNF' ], 
+        [ '!(A || B || C)', Ex('||', Ex('||', I('A'), I('B')), I('C')).negate().toNNF(), '¬A ∧ ¬B ∧ ¬C' ],
+        [ '!(A && B && C)', Ex('&&', Ex('&&', I('A'), I('B')), I('C')).negate().toNNF(), '¬A ⋁ ¬B ⋁ ¬C' ],
+        [ '!(A == B == C)', Ex('==', Ex('==', I('A'), I('B')), I('C')).negate().toNNF(), '(A ≡ B) ≠ C' ],
+        [ '!(A != B != C)', Ex('!=', Ex('!=', I('A'), I('B')), I('C')).negate().toNNF(), '(A ≠ B) ≡ C' ],
+        [ '!(A > B > C)',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')).negate().toNNF(), '(A ⋗ B) ⋜ C' ],
+        [ '!(A < B < C)',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')).negate().toNNF(), '(A ⋖ B) ⋝ C' ],
+        [ '!(A >= B >= C)', Ex('>=', Ex('>=', I('A'), I('B')), I('C')).negate().toNNF(), '(A ⋝ B) ⋖ C' ],
+        [ '!(A <= B <= C)', Ex('<=', Ex('<=', I('A'), I('B')), I('C')).negate().toNNF(), '(A ⋜ B) ⋗ C' ],
+        [ 'Operators triple terms to DNF' ], 
+        [ 'A || B || C', Ex('||', Ex('||', I('A'), I('B')), I('C')).toDNF(), 'A ⋁ B ⋁ C' ],
+        [ 'A && B && C', Ex('&&', Ex('&&', I('A'), I('B')), I('C')).toDNF(), 'A ∧ B ∧ C' ],
+        [ 'A == B == C', Ex('==', Ex('==', I('A'), I('B')), I('C')).toDNF(), 'A ≡ B ≡ C' ],
+        [ 'A != B != C', Ex('!=', Ex('!=', I('A'), I('B')), I('C')).toDNF(), 'A ≠ B ≠ C' ],
+        [ 'A > B > C',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')).toDNF(), 'A ⋗ B ⋗ C' ],
+        [ 'A < B < C',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')).toDNF(), 'A ⋖ B ⋖ C' ],
+        [ 'A >= B >= C', Ex('>=', Ex('>=', I('A'), I('B')), I('C')).toDNF(), 'A ⋝ B ⋝ C' ],
+        [ 'A <= B <= C', Ex('<=', Ex('<=', I('A'), I('B')), I('C')).toDNF(), 'A ⋜ B ⋜ C' ],
+        [ 'Operators triple terms to CNF' ], 
+        [ 'A || B || C', Ex('||', Ex('||', I('A'), I('B')), I('C')).toCNF(), 'A ⋁ B ⋁ C' ],
+        [ 'A && B && C', Ex('&&', Ex('&&', I('A'), I('B')), I('C')).toCNF(), 'A ∧ B ∧ C' ],
+        [ 'A == B == C', Ex('==', Ex('==', I('A'), I('B')), I('C')).toCNF(), 'A ≡ B ≡ C' ],
+        [ 'A != B != C', Ex('!=', Ex('!=', I('A'), I('B')), I('C')).toCNF(), 'A ≠ B ≠ C' ],
+        [ 'A > B > C',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')).toCNF(), 'A ⋗ B ⋗ C' ],
+        [ 'A < B < C',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')).toCNF(), 'A ⋖ B ⋖ C' ],
+        [ 'A >= B >= C', Ex('>=', Ex('>=', I('A'), I('B')), I('C')).toCNF(), 'A ⋝ B ⋝ C' ],
+        [ 'A <= B <= C', Ex('<=', Ex('<=', I('A'), I('B')), I('C')).toCNF(), 'A ⋜ B ⋜ C' ],
+        [ 'Different operators triple terms' ], 
+        [ '(A || B) && C', Ex('&&', Ex('||', I('A'), I('B')), I('C')), '(A ⋁ B) ∧ C' ],
+        [ '(A && B) || C', Ex('||', Ex('&&', I('A'), I('B')), I('C')), '(A ∧ B) ⋁ C' ],
+        [ '(A == B) != C', Ex('!=', Ex('==', I('A'), I('B')), I('C')), '(A ≡ B) ≠ C' ],
+        [ 'Negate different operators triple terms' ], 
+        [ '!((A || B) && C)', Ex('&&', Ex('||', I('A'), I('B')), I('C')).negate(), '¬((A ⋁ B) ∧ C)' ],
+        [ '!((A && B) || C)', Ex('||', Ex('&&', I('A'), I('B')), I('C')).negate(), '¬((A ∧ B) ⋁ C)' ],
+        [ 'Negate different operators triple terms to NNF' ], 
+        [ '!((A || B) && C)', Ex('&&', Ex('||', I('A'), I('B')), I('C')).negate().toNNF(), '(¬A ∧ ¬B) ⋁ ¬C' ],
+        [ '!((A && B) || C)', Ex('||', Ex('&&', I('A'), I('B')), I('C')).negate().toNNF(), '(¬A ⋁ ¬B) ∧ ¬C' ],
+        [ 'to CNF' ], 
+        [ '(A || B) && C', Ex('&&', Ex('||', I('A'), I('B')), I('C')).toCNF(), '(A ⋁ B) ∧ C' ],
+        [ '(A && B) || C', Ex('||', Ex('&&', I('A'), I('B')), I('C')).toCNF(), '(A ⋁ C) ∧ (B ⋁ C)' ],
+        [ 'A || (B && C)', Ex('||', I('A'),  Ex('&&', I('B'), I('C'))).toCNF(), '(B ⋁ A) ∧ (C ⋁ A)' ],
+        [ 'A && (B || C)', Ex('&&', I('A'),  Ex('||', I('B'), I('C'))).toCNF(), 'A ∧ (B ⋁ C)' ],
+        [ 'to DNF' ], 
+        [ '(A || B) && C', Ex('&&', Ex('||', I('A'), I('B')), I('C')).toDNF(), '(A ∧ C) ⋁ (B ∧ C)' ],
+        [ '(A && B) || C', Ex('||', Ex('&&', I('A'), I('B')), I('C')).toDNF(), '(A ∧ B) ⋁ C' ],
+        [ 'A || (B && C)', Ex('||', I('A'),  Ex('&&', I('B'), I('C'))).toDNF(), 'A ⋁ (B ∧ C)' ],
+        [ 'A && (B || C)', Ex('&&', I('A'),  Ex('||', I('B'), I('C'))).toDNF(), '(B ∧ A) ⋁ (C ∧ A)' ],
+        [ 'Custom boolean' ], 
+        [ 'A && B && C && D',     Ex('&&', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), I('D')), 'A ∧ B ∧ C ∧ D' ],
+        [ 'A && B && C || D',     Ex('||', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), I('D')), '(A ∧ B ∧ C) ⋁ D' ],
+        [ 'A && B && (C || D)',   Ex('&&', Ex('&&', I('A'), I('B')), Ex('||', I('C'), I('D'))), 'A ∧ B ∧ (C ⋁ D)' ],
+        [ 'A && B || C || D',     Ex('||', Ex('||', Ex('&&', I('A'), I('B')), I('C')), I('D')), '(A ∧ B) ⋁ C ⋁ D' ],
+        [ 'A && (B || C || D)',   Ex('&&', I('A'), Ex('||', Ex('||', I('B'), I('C')), I('D'))), 'A ∧ (B ⋁ C ⋁ D)' ],
+        [ '(A && B) || (C || D)', Ex('||', Ex('&&', I('A'), I('B')), Ex('||', I('C'), I('D'))), '(A ∧ B) ⋁ C ⋁ D' ],
+        [ 'A || B && C && D',     Ex('||', I('A'), Ex('&&', Ex('&&', I('B'), I('C')), I('D'))), 'A ⋁ (B ∧ C ∧ D)' ],
+        [ '(A || B) && C && D',   Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), I('C')), I('D')), '(A ⋁ B) ∧ C ∧ D' ],
+        [ 'A || B || C && D',     Ex('||', Ex('||', I('A'), I('B')), Ex('&&', I('C'), I('D'))), 'A ⋁ B ⋁ (C ∧ D)' ],
+        [ 'A || B || C || D',     Ex('||', Ex('||', Ex('||', I('A'), I('B')), I('C')), I('D')), 'A ⋁ B ⋁ C ⋁ D' ],
+        [ 'A || B && C || D',     Ex('||', Ex('||', I('A'), Ex('&&', I('B'), I('C'))), I('D')), 'A ⋁ (B ∧ C) ⋁ D' ],
+        [ '(A || B) && (C || D)', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))), '(A ⋁ B) ∧ (C ⋁ D)' ],
+        [ 'Custom mixed' ], 
+        [ 'A && B == C && D',     Ex('&&', Ex('&&', I('A'), Ex('==', I('B'), I('C'))), I('D')), 'A ∧ (B ≡ C) ∧ D' ],
+        [ 'A == B && C == D',     Ex('&&', Ex('==', I('A'), I('B')), Ex('==', I('C'), I('D'))), '(A ≡ B) ∧ (C ≡ D)' ],
+        [ 'A || B == C || D ',    Ex('||', Ex('||', I('A'), Ex('==', I('B'), I('C'))), I('D')), 'A ⋁ (B ≡ C) ⋁ D' ],
+        [ '(A || B) && C == D',   Ex('&&', Ex('||', I('A'), I('B')), Ex('==', I('C'), I('D'))), '(A ⋁ B) ∧ (C ≡ D)' ],
+        [ 'Custom pair [Normal to DNF]' ], 
+        [ '(A || B) && C', Ex('&&', Ex('||', I('A'), I('B')), I('C')), '(A ⋁ B) ∧ C' ],
+        [ '(A || B) && C {1}', Ex('&&', Ex('||', I('A'), I('B')), I('C')).toDNF(), '(A ∧ C) ⋁ (B ∧ C)' ],
+        [ 'A && (B || C)', Ex('&&', I('A'), Ex('||', I('B'), I('C'))), 'A ∧ (B ⋁ C)' ],
+        [ 'A && (B || C) {1}', Ex('&&', I('A'), Ex('||', I('B'), I('C'))).toDNF(), '(B ∧ A) ⋁ (C ∧ A)' ],
+        [ '(A || B) && (C || D)', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))), '(A ⋁ B) ∧ (C ⋁ D)' ],
+        [ '(A || B) && (C || D) {1}', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))).toDNF(), '(A ∧ (C ⋁ D)) ⋁ (B ∧ (C ⋁ D))' ],
+        [ '(A || B) && (C || D) {2}', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))).toDNF().toDNF(), '(C ∧ A) ⋁ (D ∧ A) ⋁ (C ∧ B) ⋁ (D ∧ B)' ],
+        [ '(A || B) && (C || D) {perfect}', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))).toDNF(true), '(C ∧ A) ⋁ (D ∧ A) ⋁ (C ∧ B) ⋁ (D ∧ B)' ],
+        [ '(A || B) && (C || D) && (E || F)', Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))), Ex('||', I('E'), I('F'))), '(A ⋁ B) ∧ (C ⋁ D) ∧ (E ⋁ F)' ],
+        [ '(A || B) && (C || D) && (E || F) {1}', Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))), Ex('||', I('E'), I('F'))).toDNF(), '(A ∧ (C ⋁ D) ∧ (E ⋁ F)) ⋁ (B ∧ (C ⋁ D) ∧ (E ⋁ F))' ],
+        [ '(A || B) && (C || D) && (E || F) {2}', Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))), Ex('||', I('E'), I('F'))).toDNF().toDNF(), '(C ∧ A ∧ (E ⋁ F)) ⋁ (D ∧ A ∧ (E ⋁ F)) ⋁ (C ∧ B ∧ (E ⋁ F)) ⋁ (D ∧ B ∧ (E ⋁ F))' ],
+        [ '(A || B) && (C || D) && (E || F) {3}', Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))), Ex('||', I('E'), I('F'))).toDNF().toDNF().toDNF(), '(E ∧ C ∧ A) ⋁ (F ∧ C ∧ A) ⋁ (E ∧ D ∧ A) ⋁ (F ∧ D ∧ A) ⋁ (E ∧ C ∧ B) ⋁ (F ∧ C ∧ B) ⋁ (E ∧ D ∧ B) ⋁ (F ∧ D ∧ B)' ],
+        [ '(A || B) && (C || D) && (E || F) {perfect}', Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))), Ex('||', I('E'), I('F'))).toDNF(true), '(E ∧ C ∧ A) ⋁ (F ∧ C ∧ A) ⋁ (E ∧ D ∧ A) ⋁ (F ∧ D ∧ A) ⋁ (E ∧ C ∧ B) ⋁ (F ∧ C ∧ B) ⋁ (E ∧ D ∧ B) ⋁ (F ∧ D ∧ B)' ],
+        [ '(A || B) && C == D',   Ex('&&', Ex('||', I('A'), I('B')), Ex('==', I('C'), I('D'))), '(A ⋁ B) ∧ (C ≡ D)' ],
+        [ '(A || B) && C == D',   Ex('&&', Ex('||', I('A'), I('B')), Ex('==', I('C'), I('D'))).toDNF(), '(A ∧ (C ≡ D)) ⋁ (B ∧ (C ≡ D))' ],
+      ]
+
+    if (test) {
+      const testCases = testData()
+
+      loop(testCases, (testName, actual, expected) => {
+        let result = actual.toString()
+
+        return [result === expected, result, expected]
+      })
+
+      const exp = Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))), Ex('||', I('E'), I('F')))
+      const exp2 = exp.clone().negate()
+      const values = {A: true, B: false, C: false, D: true, E: true, F: false}
+      console.log(exp.execute(values), exp.toNNF().execute(values), exp.toDNF().execute(values), exp.toDNF().toDNF().execute(values), exp.toDNF().toDNF().toDNF().execute(values), exp.toCNF().execute(values))
+      console.log(exp2.execute(values), exp2.toNNF().execute(values), exp2.toDNF().execute(values), exp2.toDNF(true).execute(values), exp2.toCNF().execute(values))
+
+
+      const exp1 = Ex('&&', Ex('||', I('A'), I('B')), Ex('==', I('C'), I('D')))
+      const exp12 = exp1.clone().negate()
+      const values1 = {A: true, B: false, C: 1, D: 1}
+      console.log(exp1.execute(values1), exp1.toNNF().execute(values1), exp1.toDNF().execute(values1), exp1.toDNF().toDNF().execute(values1), exp1.toDNF().toDNF().toDNF().execute(values1), exp1.toCNF().execute(values1))
+      console.log(exp12.execute(values1), exp12.toNNF().execute(values1), exp12.toDNF().execute(values1), exp12.toDNF(true).execute(values1), exp12.toCNF().execute(values1))
+    } else {
+      bench.start()
+      for (let i = 0; i < 10; i++) {
+        testData()
+      }
+      bench.stop()
+    }
+    
+</script>
+
+

@@ -1,0 +1,121 @@
+<script type="module">
+    import * as bench from 'tachometer/client/lib/bench.js'
+    import { Literal as L, Identifier as I, Ex } from '../../src/term.js'
+    import { Parser } from '../../src/parser.js'
+    import { Scanner } from '../../src/scanner.js'
+    import { loop } from './utils.js'
+
+    const test = new URLSearchParams(window.location.search).get('test') !== null
+    const debug = new URLSearchParams(window.location.search).get('debug') !== null
+
+    const testData = () => [
+        [ 'Literal/Identifier' ],
+        [ 'A', I('A')],
+        [ '!A', I('A').negate() ],
+        [ '"text"', L('text') ],
+        [ '!"text"', L('text').negate() ],
+        [ 'true', L('true') ],
+        [ '!true', L('true').negate() ],
+        [ 'false', L('false') ],
+        [ '!false', L('false').negate() ],
+        [ '1', L('1') ],
+        [ '-1', L('1').negate() ],
+        [ 'Operators' ], 
+        [ 'A || B', Ex('||', I('A'), I('B')) ],
+        [ 'A && B', Ex('&&', I('A'), I('B')) ],
+        [ 'A == B', Ex('==', I('A'), I('B')) ],
+        [ 'A != B', Ex('!=', I('A'), I('B')) ],
+        [ 'A > B',  Ex('>',  I('A'), I('B')) ],
+        [ 'A < B',  Ex('<',  I('A'), I('B')) ],
+        [ 'A >= B', Ex('>=', I('A'), I('B')) ],
+        [ 'A <= B', Ex('<=', I('A'), I('B')) ],
+        [ 'Negate operators' ], 
+        [ '!(A || B)', Ex('||', I('A'), I('B')).negate() ],
+        [ '!(A && B)', Ex('&&', I('A'), I('B')).negate() ],
+        [ '!(A == B)', Ex('==', I('A'), I('B')).negate() ],
+        [ '!(A != B)', Ex('!=', I('A'), I('B')).negate() ],
+        [ '!(A > B)',  Ex('>',  I('A'), I('B')).negate() ],
+        [ '!(A < B)',  Ex('<',  I('A'), I('B')).negate() ],
+        [ '!(A >= B)', Ex('>=', I('A'), I('B')).negate() ],
+        [ '!(A <= B)', Ex('<=', I('A'), I('B')).negate() ],
+        [ 'Operators triple terms' ], 
+        [ 'A || B || C', Ex('||', Ex('||', I('A'), I('B')), I('C')) ],
+        [ 'A && B && C', Ex('&&', Ex('&&', I('A'), I('B')), I('C')) ],
+        [ 'A == B == C', Ex('==', Ex('==', I('A'), I('B')), I('C')) ],
+        [ 'A != B != C', Ex('!=', Ex('!=', I('A'), I('B')), I('C')) ],
+        [ 'A > B > C',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')) ],
+        [ 'A < B < C',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')) ],
+        [ 'A >= B >= C', Ex('>=', Ex('>=', I('A'), I('B')), I('C')) ],
+        [ 'A <= B <= C', Ex('<=', Ex('<=', I('A'), I('B')), I('C')) ],
+        [ 'Negate operators triple terms' ], 
+        [ '!(A || B || C)', Ex('||', Ex('||', I('A'), I('B')), I('C')).negate() ],
+        [ '!(A && B && C)', Ex('&&', Ex('&&', I('A'), I('B')), I('C')).negate() ],
+        [ '!(A == B == C)', Ex('==', Ex('==', I('A'), I('B')), I('C')).negate() ],
+        [ '!(A != B != C)', Ex('!=', Ex('!=', I('A'), I('B')), I('C')).negate() ],
+        [ '!(A > B > C)',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')).negate() ],
+        [ '!(A < B < C)',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')).negate() ],
+        [ '!(A >= B >= C)', Ex('>=', Ex('>=', I('A'), I('B')), I('C')).negate() ],
+        [ '!(A <= B <= C)', Ex('<=', Ex('<=', I('A'), I('B')), I('C')).negate() ],
+        [ 'Different operators triple terms' ], 
+        [ '(A || B) && C',        Ex('&&', Ex('||', I('A'), I('B')), I('C')) ],
+        [ 'A && B || C',          Ex('||', Ex('&&', I('A'), I('B')), I('C')) ],
+        [ 'A == B != C',          Ex('!=', Ex('==', I('A'), I('B')), I('C')) ],
+        [ 'Negate different operators triple terms' ], 
+        [ '!((A || B) && C)',     Ex('&&', Ex('||', I('A'), I('B')), I('C')).negate() ],
+        [ '!(A && B || C)',       Ex('||', Ex('&&', I('A'), I('B')), I('C')).negate() ],
+        [ 'Custom' ], 
+        [ 'A || B && C',          Ex('||', I('A'),  Ex('&&', I('B'), I('C'))) ],
+        [ 'A && (B || C)',        Ex('&&', I('A'),  Ex('||', I('B'), I('C'))) ],
+        [ 'A && B && C && D',     Ex('&&', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
+        [ 'A && B && C || D',     Ex('||', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
+        [ 'A && B && (C || D)',   Ex('&&', Ex('&&', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
+        [ 'A && B || C || D',     Ex('||', Ex('||', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
+        [ 'A && (B || C || D)',   Ex('&&', I('A'), Ex('||', Ex('||', I('B'), I('C')), I('D'))) ],
+        [ 'A && B || (C || D)',   Ex('||', Ex('&&', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
+        [ 'A || B && C && D',     Ex('||', I('A'), Ex('&&', Ex('&&', I('B'), I('C')), I('D'))) ],
+        [ '(A || B) && C && D',   Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), I('C')), I('D')) ],
+        [ 'A || B || C && D',     Ex('||', Ex('||', I('A'), I('B')), Ex('&&', I('C'), I('D'))) ],
+        [ 'A || B || C || D',     Ex('||', Ex('||', Ex('||', I('A'), I('B')), I('C')), I('D')) ],
+        [ 'A || B && C || D',     Ex('||', Ex('||', I('A'), Ex('&&', I('B'), I('C'))), I('D')) ],
+        [ '(A || B) && (C || D)', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
+        [ 'Custom mixed' ], 
+        [ 'A && B == C && D',     Ex('&&', Ex('&&', I('A'), Ex('==', I('B'), I('C'))), I('D')) ],
+        [ 'A == B && C == D',     Ex('&&', Ex('==', I('A'), I('B')), Ex('==', I('C'), I('D'))) ],
+        [ 'A || B == C || D ',    Ex('||', Ex('||', I('A'), Ex('==', I('B'), I('C'))), I('D')) ],
+        [ '(A || B) && C == D',   Ex('&&', Ex('||', I('A'), I('B')), Ex('==', I('C'), I('D'))) ],
+      ]
+
+    if (test) {
+      const scanner = new Scanner()
+      const parser = new Parser(scanner)
+
+      const parse = parser.testMethod('PrecedenceExpression')
+
+      const testCases = testData()
+
+      loop(testCases, (testName, expected) => {
+        let result = parse(testName)
+
+        return [result.equalTo(expected), result, expected]
+      })
+     } else {
+      const scanner = new Scanner()
+      const parser = new Parser(scanner)
+
+      const parse = parser.testMethod('PrecedenceExpression')
+
+      const testCases = testData()
+      bench.start()
+      for (let i = 0; i < 10; i++) {
+        for (let x = 0; x < testCases.length; x++) {
+          if (testCases[x].length === 1) continue
+          
+          parse(testCases[x][0])
+        }
+      }
+      bench.stop()
+    }
+    
+</script>
+
+

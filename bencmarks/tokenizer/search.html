@@ -1,0 +1,167 @@
+<script type="module">
+    import { unpack, pack } from 'msgpackr';
+    import * as bench from 'tachometer/client/lib/bench.js'
+    import { Tokenizer } from '../../src/tokenizer-test.js'
+    import { fixture, fixture2 } from './fixture.js'
+
+    const test = new URLSearchParams(window.location.search).get('test')
+    const token = new URLSearchParams(window.location.search).get('token')
+    const debug = new URLSearchParams(window.location.search).get('debug')
+    let Scanner
+    
+    switch (test) {
+      case 'regexp': {
+        Scanner = class BinaryTokenizer extends Tokenizer {
+          constructor(source) {
+            super(source)
+          }
+
+          nextExpression(keywords, keywordsCallback) {
+            if (this.cursor >= this.length) return null
+
+            const searchString = ',|;|' + keywords + '|(|)'
+
+            const reCombine = new RegExp(searchString.replace(/[.*+?^${}()[\]\\]/g, "\\$&"), 'g')
+            let startPosition = reCombine.lastIndex = this.cursor
+
+            let search = null
+            let openBracket = 0
+            let resultString = ''
+
+            while (search = reCombine.exec(this.source)) {
+              const value = search[0]
+
+              if (value.length > 1) {
+                resultString += this.slice(startPosition, search.index)
+                this.cursor = search.index + value.length - 1
+                this.next()
+                resultString += keywordsCallback(value)
+                startPosition = reCombine.lastIndex = this.cursor
+                continue
+              }
+
+              if (value === '(') {
+                openBracket++
+                continue
+              }
+
+              if (value === ')' && openBracket !== 0) {
+                openBracket--
+                continue
+              }
+
+              if (openBracket !== 0) continue
+
+              if (value === ',' || value === ')' || value === ';') {
+                this.cursor = search.index
+                this.next()
+
+                return [resultString + this.slice(startPosition, search.index), value]
+              }
+            }
+          }
+          nextToToken(token) {
+            if (this.cursor >= this.length) return null
+            
+            const re = new RegExp(token.replace(/[.*+?^${}()[\]\\]/g, "\\$&"), 'g')
+            const startPosition = re.lastIndex = this.cursor
+
+            const search = re.exec(this.source)
+
+            if (search !== null) {
+              this.cursor = search.index + search[0].length - 1
+              this.next()
+
+              return [ this.slice(startPosition, search.index), search[0] ]
+            } else {
+              this.cursor = this.length
+
+              return [ this.slice(startPosition, this.cursor), null ]
+            }
+          }
+        }
+
+        break
+      }
+      case 'iteration': {
+        Scanner = Tokenizer
+        break
+      }
+    }
+
+    if (true) {
+      bench.start();
+      for (let i = 0; i < 50; i++) {
+      const example = new Scanner(i + fixture + i)
+      let match = example.nextToToken('iff')
+
+      const mIff = () => {
+        let result = ''
+        result += 'iff'
+        result += example.nextToken().value // (
+        const [arg, comma] = example.nextToToken(',')
+        result += '[' + arg.value + ']'
+        result += comma.value
+        const [nextExpr, end] = example.nextExpression('iff', () => mIff())
+        result += '[' + nextExpr + ']'
+        if (end === ',') {
+          result += end
+          const [nextExpr, end1] = example.nextExpression('iff', () => mIff())
+          result += '[' + nextExpr + ']'
+          result += end1
+        } else {
+          result += end
+        }
+
+        return result
+      }
+
+      while (match[1] !== null) {
+        console.log(mIff())
+        match = example.nextToToken('iff')
+      }
+      }
+      bench.stop();
+    }
+
+    if (false) {
+      const example = new Scanner(fixture)
+      console.log(example.nextToken())
+      console.log(example.nextToken())
+      console.log(example.nextToToken(token))
+      console.log(example.nextToken())
+      console.log(example.nextToken())
+      console.log(example.nextToToken(token))
+      console.log(example.nextToken())
+      console.log(example.nextToken())
+      console.log(example.nextToToken(token))
+      console.log(example.nextToken())
+      console.log(example.nextToken())
+      console.log(example.nextToToken(token))
+      console.log(example.nextToken())
+      console.log(example.nextToken())
+      console.log(example.nextToToken(token))
+      console.log(example.nextToken())
+      console.log(example.nextToken())
+      console.log(example.nextToToken(token))
+      console.log(example.nextToken())
+      console.log(example.nextToken())
+      console.log(example.nextToToken(token))
+      console.log(example.nextToken())
+    }
+    
+
+    // bench.start();
+    // for (let i = 0; i < 50; i++) {
+    //   const scanner = new Scanner(fixture)
+    //   scanner.nextToken()
+    //   scanner.nextToken()
+    //   while (scanner.nextToToken(token)) {
+    //     scanner.nextToken()
+    //     scanner.nextToken()
+    //   }
+    // }
+    // bench.stop();
+</script>
+
+
