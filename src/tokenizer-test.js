@@ -149,7 +149,7 @@ const TokenType = {
       return null
     }
   
-    nextToToken(token) {
+    nextTo(token) {
       if (this.cursor >= this.length) return null
       const startPosition = this.cursor
   

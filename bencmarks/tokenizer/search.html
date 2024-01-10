@@ -16,6 +16,49 @@
             super(source)
           }
 
+          nextUntil(stopTokens, innerTokens, innerTokensCallback) {
+            if (!this.isScanning()) return ['', null]
+
+            const reCombine = new RegExp(`(?<stop>${stopTokens.replace(/[.*+?^${}()\[\]]/g, "\\$&")})|(?<inner>${innerTokens})|\\(|\\)`, 'g')
+            let startPosition = reCombine.lastIndex = this.cursor
+
+            let search = null
+            let openBracket = 0
+            let resultString = ''
+
+            while (search = reCombine.exec(this.source)) {
+              const value = search[0]
+
+              if (search.groups.inner !== undefined) {
+                resultString += this.slice(startPosition, search.index)
+                this.cursor = search.index + value.length - 1
+                this.next()
+                resultString += innerTokensCallback(value)
+                startPosition = reCombine.lastIndex = this.cursor
+                continue
+              }
+
+              if (value === '(') {
+                openBracket++
+                continue
+              }
+
+              if (value === ')' && openBracket !== 0) {
+                openBracket--
+                continue
+              }
+
+              if (openBracket !== 0) continue
+
+              if (search.groups.stop !== undefined) {
+                this.cursor = search.index
+                this.next()
+
+                return [resultString + this.slice(startPosition, search.index), value]
+              }
+            }
+          }
+
           nextExpression(keywords, keywordsCallback) {
             if (this.cursor >= this.length) return null
 
@@ -60,7 +103,7 @@
               }
             }
           }
-          nextToToken(token) {
+          nextTo(token) {
             if (this.cursor >= this.length) return null
             
             const re = new RegExp(token.replace(/[.*+?^${}()[\]\\]/g, "\\$&"), 'g')
@@ -93,20 +136,22 @@
       bench.start();
       for (let i = 0; i < 50; i++) {
       const example = new Scanner(i + fixture + i)
-      let match = example.nextToToken('iff')
+      let match = example.nextTo('iff')
 
       const mIff = () => {
         let result = ''
         result += 'iff'
         result += example.nextToken().value // (
-        const [arg, comma] = example.nextToToken(',')
-        result += '[' + arg.value + ']'
-        result += comma.value
-        const [nextExpr, end] = example.nextExpression('iff', () => mIff())
+        const [arg, comma] = example.nextTo(',')
+        result += '[' + arg + ']'
+        result += comma
+        const [nextExpr, end] = example.nextUntil(',|)','iff', mIff)
+        // const [nextExpr, end] = example.nextExpression('iff', () => mIff())
         result += '[' + nextExpr + ']'
         if (end === ',') {
           result += end
-          const [nextExpr, end1] = example.nextExpression('iff', () => mIff())
+          const [nextExpr, end1] = example.nextUntil(')','iff', mIff)
+          // const [nextExpr, end1] = example.nextExpression(')','iff', mIff)
           result += '[' + nextExpr + ']'
           result += end1
         } else {
@@ -117,8 +162,9 @@
       }
 
       while (match[1] !== null) {
-        console.log(mIff())
-        match = example.nextToToken('iff')
+        mIff()
+        // console.log(mIff())
+        match = example.nextTo('iff')
       }
       }
       bench.stop();
@@ -128,25 +174,25 @@
       const example = new Scanner(fixture)
       console.log(example.nextToken())
       console.log(example.nextToken())
-      console.log(example.nextToToken(token))
+      console.log(example.nextTo(token))
       console.log(example.nextToken())
       console.log(example.nextToken())
-      console.log(example.nextToToken(token))
+      console.log(example.nextTo(token))
       console.log(example.nextToken())
       console.log(example.nextToken())
-      console.log(example.nextToToken(token))
+      console.log(example.nextTo(token))
       console.log(example.nextToken())
       console.log(example.nextToken())
-      console.log(example.nextToToken(token))
+      console.log(example.nextTo(token))
       console.log(example.nextToken())
       console.log(example.nextToken())
-      console.log(example.nextToToken(token))
+      console.log(example.nextTo(token))
       console.log(example.nextToken())
       console.log(example.nextToken())
-      console.log(example.nextToToken(token))
+      console.log(example.nextTo(token))
       console.log(example.nextToken())
       console.log(example.nextToken())
-      console.log(example.nextToToken(token))
+      console.log(example.nextTo(token))
       console.log(example.nextToken())
     }
     
@@ -156,7 +202,7 @@
     //   const scanner = new Scanner(fixture)
     //   scanner.nextToken()
     //   scanner.nextToken()
-    //   while (scanner.nextToToken(token)) {
+    //   while (scanner.nextTo(token)) {
     //     scanner.nextToken()
     //     scanner.nextToken()
     //   }

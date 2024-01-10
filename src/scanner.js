@@ -151,10 +151,10 @@ export class Scanner {
     return null
   }
 
-  nextToToken(token) {
-    if (!this.isScanning()) return null
+  nextTo(stopTokens) {
+    if (!this.isScanning()) return ['', null]
     
-    const re = new RegExp(token.replace(/[.*+?^${}()[\]\\]/g, "\\$&"), 'g')
+    const re = new RegExp(stopTokens.replace(/[.*+?^${}()\[\]]/g, "\\$&"), 'g')
     const startPosition = re.lastIndex = this.cursor
 
     const search = re.exec(this.source)
@@ -163,11 +163,56 @@ export class Scanner {
       this.cursor = search.index + search[0].length - 1
       this.next()
 
-      return [ this.slice(startPosition, search.index), search[0] ]
+      return [ this.slice(startPosition, search.index), { type: search[0], value: search[0] } ]
     } else {
       this.cursor = this.length
 
       return [ this.slice(startPosition, this.cursor), null ]
+    }
+  }
+
+  nextUntil(stopTokens, innerTokens, innerTokensCallback) {
+    if (!this.isScanning()) return ['', null]
+
+    stopTokens = stopTokens.replace(/[.*+?^${}()\[\]]/g, "\\$&")
+    const reCombine = new RegExp(`(?<stop>${stopTokens})|(?<inner>${innerTokens})|\\(|\\)`, 'g')
+    let startPosition = reCombine.lastIndex = this.cursor
+
+    let search = null
+    let openBracket = 0
+    let resultString = ''
+
+    while (search = reCombine.exec(this.source)) {
+      const value = search[0]
+
+      if (search.groups.inner !== undefined) {
+        resultString += this.slice(startPosition, search.index)
+        this.cursor = search.index + value.length - 1
+        this.next()
+        resultString += innerTokensCallback({ type: value, value })
+        startPosition = reCombine.lastIndex = this.cursor
+        continue
+      }
+
+      if (value === '(') {
+        openBracket++
+        continue
+      }
+
+      if (value === ')' && openBracket !== 0) {
+        openBracket--
+        continue
+      }
+
+      if (openBracket !== 0) continue
+
+      if (search.groups.stop !== undefined) {
+        // TODO: Если сложный токен, такой как >=, а мы ищем совпадение >, нужно делать проверку на полный токен
+        this.cursor = search.index
+        this.next()
+
+        return [resultString + this.slice(startPosition, search.index), { type: value, value }]
+      }
     }
   }
 

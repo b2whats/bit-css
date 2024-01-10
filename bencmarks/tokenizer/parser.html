@@ -1,103 +1,176 @@
 <script type="module">
     import * as bench from 'tachometer/client/lib/bench.js'
-    import { Literal as L, Identifier as I, Ex } from '../../src/term.js'
+    import { L, I, Ex } from '../../src/term.js'
     import { Parser } from '../../src/parser.js'
     import { Scanner } from '../../src/scanner.js'
+    import { Scheme } from '../../src/scheme.js'
     import { loop } from './utils.js'
 
     const test = new URLSearchParams(window.location.search).get('test') !== null
     const debug = new URLSearchParams(window.location.search).get('debug') !== null
 
     const testData = () => [
-        [ 'Literal/Identifier' ],
-        [ 'A', I('A')],
-        [ '!A', I('A').negate() ],
-        [ '"text"', L('text') ],
-        [ '!"text"', L('text').negate() ],
-        [ 'true', L('true') ],
-        [ '!true', L('true').negate() ],
-        [ 'false', L('false') ],
-        [ '!false', L('false').negate() ],
-        [ '1', L('1') ],
-        [ '-1', L('1').negate() ],
-        [ 'Operators' ], 
-        [ 'A || B', Ex('||', I('A'), I('B')) ],
-        [ 'A && B', Ex('&&', I('A'), I('B')) ],
-        [ 'A == B', Ex('==', I('A'), I('B')) ],
-        [ 'A != B', Ex('!=', I('A'), I('B')) ],
-        [ 'A > B',  Ex('>',  I('A'), I('B')) ],
-        [ 'A < B',  Ex('<',  I('A'), I('B')) ],
-        [ 'A >= B', Ex('>=', I('A'), I('B')) ],
-        [ 'A <= B', Ex('<=', I('A'), I('B')) ],
-        [ 'Negate operators' ], 
-        [ '!(A || B)', Ex('||', I('A'), I('B')).negate() ],
-        [ '!(A && B)', Ex('&&', I('A'), I('B')).negate() ],
-        [ '!(A == B)', Ex('==', I('A'), I('B')).negate() ],
-        [ '!(A != B)', Ex('!=', I('A'), I('B')).negate() ],
-        [ '!(A > B)',  Ex('>',  I('A'), I('B')).negate() ],
-        [ '!(A < B)',  Ex('<',  I('A'), I('B')).negate() ],
-        [ '!(A >= B)', Ex('>=', I('A'), I('B')).negate() ],
-        [ '!(A <= B)', Ex('<=', I('A'), I('B')).negate() ],
-        [ 'Operators triple terms' ], 
-        [ 'A || B || C', Ex('||', Ex('||', I('A'), I('B')), I('C')) ],
-        [ 'A && B && C', Ex('&&', Ex('&&', I('A'), I('B')), I('C')) ],
-        [ 'A == B == C', Ex('==', Ex('==', I('A'), I('B')), I('C')) ],
-        [ 'A != B != C', Ex('!=', Ex('!=', I('A'), I('B')), I('C')) ],
-        [ 'A > B > C',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')) ],
-        [ 'A < B < C',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')) ],
-        [ 'A >= B >= C', Ex('>=', Ex('>=', I('A'), I('B')), I('C')) ],
-        [ 'A <= B <= C', Ex('<=', Ex('<=', I('A'), I('B')), I('C')) ],
-        [ 'Negate operators triple terms' ], 
-        [ '!(A || B || C)', Ex('||', Ex('||', I('A'), I('B')), I('C')).negate() ],
-        [ '!(A && B && C)', Ex('&&', Ex('&&', I('A'), I('B')), I('C')).negate() ],
-        [ '!(A == B == C)', Ex('==', Ex('==', I('A'), I('B')), I('C')).negate() ],
-        [ '!(A != B != C)', Ex('!=', Ex('!=', I('A'), I('B')), I('C')).negate() ],
-        [ '!(A > B > C)',   Ex('>',  Ex('>',  I('A'), I('B')), I('C')).negate() ],
-        [ '!(A < B < C)',   Ex('<',  Ex('<',  I('A'), I('B')), I('C')).negate() ],
-        [ '!(A >= B >= C)', Ex('>=', Ex('>=', I('A'), I('B')), I('C')).negate() ],
-        [ '!(A <= B <= C)', Ex('<=', Ex('<=', I('A'), I('B')), I('C')).negate() ],
-        [ 'Different operators triple terms' ], 
-        [ '(A || B) && C',        Ex('&&', Ex('||', I('A'), I('B')), I('C')) ],
-        [ 'A && B || C',          Ex('||', Ex('&&', I('A'), I('B')), I('C')) ],
-        [ 'A == B != C',          Ex('!=', Ex('==', I('A'), I('B')), I('C')) ],
-        [ 'Negate different operators triple terms' ], 
-        [ '!((A || B) && C)',     Ex('&&', Ex('||', I('A'), I('B')), I('C')).negate() ],
-        [ '!(A && B || C)',       Ex('||', Ex('&&', I('A'), I('B')), I('C')).negate() ],
-        [ 'Custom' ], 
-        [ 'A || B && C',          Ex('||', I('A'),  Ex('&&', I('B'), I('C'))) ],
-        [ 'A && (B || C)',        Ex('&&', I('A'),  Ex('||', I('B'), I('C'))) ],
-        [ 'A && B && C && D',     Ex('&&', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
-        [ 'A && B && C || D',     Ex('||', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
-        [ 'A && B && (C || D)',   Ex('&&', Ex('&&', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
-        [ 'A && B || C || D',     Ex('||', Ex('||', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
-        [ 'A && (B || C || D)',   Ex('&&', I('A'), Ex('||', Ex('||', I('B'), I('C')), I('D'))) ],
-        [ 'A && B || (C || D)',   Ex('||', Ex('&&', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
-        [ 'A || B && C && D',     Ex('||', I('A'), Ex('&&', Ex('&&', I('B'), I('C')), I('D'))) ],
-        [ '(A || B) && C && D',   Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), I('C')), I('D')) ],
-        [ 'A || B || C && D',     Ex('||', Ex('||', I('A'), I('B')), Ex('&&', I('C'), I('D'))) ],
-        [ 'A || B || C || D',     Ex('||', Ex('||', Ex('||', I('A'), I('B')), I('C')), I('D')) ],
-        [ 'A || B && C || D',     Ex('||', Ex('||', I('A'), Ex('&&', I('B'), I('C'))), I('D')) ],
-        [ '(A || B) && (C || D)', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
-        [ 'Custom mixed' ], 
-        [ 'A && B == C && D',     Ex('&&', Ex('&&', I('A'), Ex('==', I('B'), I('C'))), I('D')) ],
-        [ 'A == B && C == D',     Ex('&&', Ex('==', I('A'), I('B')), Ex('==', I('C'), I('D'))) ],
-        [ 'A || B == C || D ',    Ex('||', Ex('||', I('A'), Ex('==', I('B'), I('C'))), I('D')) ],
-        [ '(A || B) && C == D',   Ex('&&', Ex('||', I('A'), I('B')), Ex('==', I('C'), I('D'))) ],
-      ]
+      [ 'Literal/Identifier' ],
+      [ 'A', I('A')],
+      [ '!A', I('A').negate() ],
+      [ '"text"', L('text') ],
+      [ '!"text"', 'error' ],
+      [ 'true', L('true') ],
+      [ '!true', 'error' ],
+      [ 'false', L('false') ],
+      [ '!false', 'error' ],
+      [ 'null', L('null') ],
+      [ '!null', 'error' ],
+      [ '1', L('1') ],
+      [ '-1', L('1').negate() ],
+      [ 'Operators' ], 
+      [ 'A || B', Ex('||', I('A'), I('B')) ],
+      [ 'A && B', Ex('&&', I('A'), I('B')) ],
+      [ 'A == "B"', Ex('==', I('A'), L('B')) ],
+      [ 'A != "B"', Ex('!=', I('A'), L('B')) ],
+      [ 'A > "B"',  Ex('>',  I('A'), L('B')) ],
+      [ 'A < "B"',  Ex('<',  I('A'), L('B')) ],
+      [ 'A >= "B"', Ex('>=', I('A'), L('B')) ],
+      [ 'A <= "B"', Ex('<=', I('A'), L('B')) ],
+      [ 'A == B', 'error' ],
+      [ 'A != B', 'error' ],
+      [ 'A > B',  'error' ],
+      [ 'A < B',  'error' ],
+      [ 'A >= B', 'error' ],
+      [ 'A <= B', 'error' ],
+      [ '!A == B', 'error' ],
+      [ 'Negate operators' ], 
+      [ '!(A || B)', Ex('||', I('A'), I('B')).negate() ],
+      [ '!(A && B)', Ex('&&', I('A'), I('B')).negate() ],
+      [ '!(A == "B")', Ex('==', I('A'), L('B')).negate() ],
+      [ '!(A != "B")', Ex('!=', I('A'), L('B')).negate() ],
+      [ '!(A > "B")',  Ex('>',  I('A'), L('B')).negate() ],
+      [ '!(A < "B")',  Ex('<',  I('A'), L('B')).negate() ],
+      [ '!(A >= "B")', Ex('>=', I('A'), L('B')).negate() ],
+      [ '!(A <= "B")', Ex('<=', I('A'), L('B')).negate() ],
+      [ '!(A == B)', 'error' ],
+      [ '!(A != B)', 'error' ],
+      [ '!(A > B)',  'error' ],
+      [ '!(A < B)',  'error' ],
+      [ '!(A >= B)', 'error' ],
+      [ '!(A <= B)', 'error' ],
+      [ 'Operators triple terms' ], 
+      [ 'A || B || C', Ex('||', Ex('||', I('A'), I('B')), I('C')) ],
+      [ 'A && B && C', Ex('&&', Ex('&&', I('A'), I('B')), I('C')) ],
+      [ 'A == B == C', 'error' ],
+      [ 'A != B != C', 'error' ],
+      [ 'A > B > C',   'error' ],
+      [ 'A < B < C',   'error' ],
+      [ 'A >= B >= C', 'error' ],
+      [ 'A <= B <= C', 'error' ],
+      [ 'Negate operators triple terms' ], 
+      [ '!(A || B || C)', Ex('||', Ex('||', I('A'), I('B')), I('C')).negate() ],
+      [ '!(A && B && C)', Ex('&&', Ex('&&', I('A'), I('B')), I('C')).negate() ],
+      [ 'Different operators triple terms' ], 
+      [ '(A || B) && C',        Ex('&&', Ex('||', I('A'), I('B')), I('C')) ],
+      [ 'A && B || C',          Ex('||', Ex('&&', I('A'), I('B')), I('C')) ],
+      [ 'Negate different operators triple terms' ], 
+      [ '!((A || B) && C)',     Ex('&&', Ex('||', I('A'), I('B')), I('C')).negate() ],
+      [ '!(A && B || C)',       Ex('||', Ex('&&', I('A'), I('B')), I('C')).negate() ],
+      [ 'Custom' ], 
+      [ 'A || B && C',          Ex('||', I('A'),  Ex('&&', I('B'), I('C'))) ],
+      [ 'A && (B || C)',        Ex('&&', I('A'),  Ex('||', I('B'), I('C'))) ],
+      [ 'A && B && C && D',     Ex('&&', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
+      [ 'A && B && C || D',     Ex('||', Ex('&&', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
+      [ 'A && B && (C || D)',   Ex('&&', Ex('&&', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
+      [ 'A && B || C || D',     Ex('||', Ex('||', Ex('&&', I('A'), I('B')), I('C')), I('D')) ],
+      [ 'A && (B || C || D)',   Ex('&&', I('A'), Ex('||', Ex('||', I('B'), I('C')), I('D'))) ],
+      [ 'A && B || (C || D)',   Ex('||', Ex('&&', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
+      [ 'A || B && C && D',     Ex('||', I('A'), Ex('&&', Ex('&&', I('B'), I('C')), I('D'))) ],
+      [ '(A || B) && C && D',   Ex('&&', Ex('&&', Ex('||', I('A'), I('B')), I('C')), I('D')) ],
+      [ 'A || B || C && D',     Ex('||', Ex('||', I('A'), I('B')), Ex('&&', I('C'), I('D'))) ],
+      [ 'A || B || C || D',     Ex('||', Ex('||', Ex('||', I('A'), I('B')), I('C')), I('D')) ],
+      [ 'A || B && C || D',     Ex('||', Ex('||', I('A'), Ex('&&', I('B'), I('C'))), I('D')) ],
+      [ '(A || B) && (C || D)', Ex('&&', Ex('||', I('A'), I('B')), Ex('||', I('C'), I('D'))) ],
+      [ 'Custom mixed' ], 
+      [ 'A && B == "C" && D',     Ex('&&', Ex('&&', I('A'), Ex('==', I('B'), L('C'))), I('D')) ],
+      [ 'A == "B" && C == "D"',     Ex('&&', Ex('==', I('A'), L('B')), Ex('==', I('C'), L('D'))) ],
+      [ 'A || B == "C" || D ',    Ex('||', Ex('||', I('A'), Ex('==', I('B'), L('C'))), I('D')) ],
+      [ '(A || B) && C == "D"',   Ex('&&', Ex('||', I('A'), I('B')), Ex('==', I('C'), L('D'))) ],
+    ]
+
+    const parseTestData = [
+      [ 'if' ],
+      [ '  if single' ], 
+      [ 'if(A, red)', 'var(--A, red)' ],
+      [ 'if(!A, red)', 'var(--¬A, red)' ],
+      [ 'if(A == true, red)', 'var(--A, red)' ],
+      [ 'if(A == false, red)', 'var(--¬A, red)' ],
+      [ 'if(A != true, red)', 'var(--¬A, red)' ],
+      [ 'if(A != false, red)', 'var(--A, red)' ],
+      [ 'if(!A != false, red)', 'error' ],
+      [ 'if(1, red)', ' red' ],
+      [ 'if(true, red)', ' red' ],
+      [ 'if(0, red)', '' ],
+      [ 'if(null, red)', '' ],
+      [ 'if(false, red)', '' ],
+      [ '  if/else' ], 
+      [ 'if(A, red, blue)', 'var(--A, red) var(--¬A, blue)' ],
+      [ 'if(!A, red, blue)', 'var(--¬A, red) var(--A, blue)' ],
+      [ 'if(A == true, red, blue)', 'var(--A, red) var(--¬A, blue)' ],
+      [ 'if(A == false, red, blue)', 'var(--¬A, red) var(--A, blue)' ],
+      [ 'if(A != true, red, blue)', 'var(--¬A, red) var(--A, blue)' ],
+      [ 'if(A != false, red, blue)', 'var(--A, red) var(--¬A, blue)' ],
+      [ 'if(1, red, blue)', ' red' ],
+      [ 'if(true, red, blue)', ' red' ],
+      [ 'if(0, red, blue)', ' blue' ],
+      [ 'if(null, red, blue)', ' blue' ],
+      [ 'if(false, red, blue)', ' blue' ],
+
+      [ 'if(A && B && C || D, red, blue)', ' blue' ],
+      [ 'if(A && B || C && D, red, blue)', ' blue' ],
+      [ 'if(A && B && C == 1, red, blue)', ' blue' ],
+      [ 'if(A == 1 && C == 1, red, blue)', ' blue' ],
+
+      // [ 'if(A || B, red)', 'if([A || B],[ red])' ],
+      // [ 'if(A || B, red, green)', 'if([A || B],[ red],[ green])' ],
+      // [ 'if(A || B, <red test(1,if(C && D, red)) red>)', 'if([A || B],[ <red test(1,if([C && D],[ red])) red>])' ],
+      // [ 'before => if(A || B, red) <= beetwen => if(C || D, green) <= after', 'before => if([A || B],[ red]) <= beetwen => if([C || D],[ green]) <= after' ],
+      // [ 'if(A || B, if(C && D, red))', 'if([A || B],[ if([C && D],[ red])])' ],
+      // [ 'if(A || B, if(C && D, red), red)', 'if([A || B],[ if([C && D],[ red])],[ red])' ],
+      // [ 'if(A || B, if(C && D, red, green), if(C && D, red, green))', 'if([A || B],[ if([C && D],[ red],[ green])],[ if([C && D],[ red],[ green])])' ],
+      // [ 'if(A && B && C || D && E && F, red, green)', 'if([A || B],[ if([C && D],[ red],[ green])],[ if([C && D],[ red],[ green])])' ],
+    ]
 
     if (test) {
       const scanner = new Scanner()
       const parser = new Parser(scanner)
+      const scheme = new Scheme()
 
       const parse = parser.testMethod('PrecedenceExpression')
 
       const testCases = testData()
 
       loop(testCases, (testName, expected) => {
-        let result = parse(testName)
+        try {
+          let result = parse(testName)
 
-        return [result.equalTo(expected), result, expected]
+          return [result.equalTo(expected), result, expected]
+        } catch (error) {
+          return ['error' === expected, 'Error: ' + error.message, expected]
+        }
       })
+
+      loop(parseTestData, (testName, expected) => {
+        try {
+          let result = parser.parse(testName, scheme)
+
+          const pass = result === expected
+        if (result === '') result = '""'
+
+          return [pass, result, expected]
+        } catch (error) {
+          return ['error' === expected, error.message, expected]
+        }
+      })
+
+      console.log(scheme)
+
      } else {
       const scanner = new Scanner()
       const parser = new Parser(scanner)
@@ -109,7 +182,7 @@
       for (let i = 0; i < 10; i++) {
         for (let x = 0; x < testCases.length; x++) {
           if (testCases[x].length === 1) continue
-          
+
           parse(testCases[x][0])
         }
       }

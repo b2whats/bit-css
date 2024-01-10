@@ -1,17 +1,19 @@
 import { TokenType } from './scanner'
 
 const operators = new Map([
-  [ "||", ['&&', '⋁'] ],
-  [ "&&", ['||', '∧'] ],
-  [ "==", ['!=', '≡'] ],
-  [ "!=", ['==', '≠'] ],
-  [ "<",  ['>=', '⋖'] ],
-  [ ">",  ['<=', '⋗'] ],
-  [ "<=", ['>',  '⋜'] ],
-  [ ">=", ['<',  '⋝'] ],
-  [ "-",  ['-',  '-'] ],
-  [ "!",  ['!',  '¬'] ],
+  [ "||", '&&' ],
+  [ "&&", '||' ],
+  [ "==", '!=' ],
+  [ "!=", '==' ],
+  [ "<",  '>=' ],
+  [ ">",  '<=' ],
+  [ "<=", '>'  ],
+  [ ">=", '<'  ],
+  [ "-",  '-'  ],
+  [ "!",  '!'  ],
 ])
+
+const assert = (cond, message) => { if (cond) throw new SyntaxError(message) }
 
 export function Term(type, left, right) {
   this.type = type
@@ -20,49 +22,70 @@ export function Term(type, left, right) {
   this.right = null
   this.value = null
   this.parent = null
+  // 1 - number 2- boolean 3 - null 4 - string
+  this.typeOf = 0 
 
   // TODO: Проверка при создании выражений X .. number что левая часть это identifier а правая число
   switch (type) {
     case '==':
-      // A == true -> A 
-      // A == false -> !A
-      if (left.type === TokenType.Identifier && right.value === 'true') {
-        this.type = TokenType.Identifier
-        this.value = left.value
-        break
-      } else if (left.type === TokenType.Identifier && right.value === 'false') {
-        this.type = TokenType.Identifier
-        this.value = left.value
-        this.negated = true
-        break
+      if (left.type === TokenType.Identifier) {
+        assert(left.negated, `left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
+        // A == true -> A 
+        if (right.value === 'true') {
+          this.type = TokenType.Identifier
+          this.value = left.value
+          break
+        }
+        // A == false -> !A
+        if (right.value === 'false') {
+          this.type = TokenType.Identifier
+          this.value = left.value
+          this.negated = true
+          break
+        }
       }
     case '!=':
-      // A != true -> !A 
-      // A != false -> A
-      if (left.type === TokenType.Identifier && right.value === 'false') {
-        this.type = TokenType.Identifier
-        this.value = left.value
-        break
-      } else if (left.type === TokenType.Identifier && right.value === 'true') {
-        this.type = TokenType.Identifier
-        this.value = left.value
-        this.negated = true
-        break
+      if (left.type === TokenType.Identifier) {
+        assert(left.negated, `left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
+        // A != false -> A
+        if (right.value === 'false') {
+          this.type = TokenType.Identifier
+          this.value = left.value
+          break
+        }
+        // A != true -> !A 
+        if (right.value === 'true') {
+          this.type = TokenType.Identifier
+          this.value = left.value
+          this.negated = true
+          break
+        }
       }
-    case '&&':
-    case '||':
     case '>':
     case '<':
     case '>=':
     case '<=':
+      assert(left.type !== TokenType.Identifier, `left side "${left}" of the expression "${left} ${type} ${right}"  must be an identifier`)
+      assert(right.type !== TokenType.Literal && right.type !== TokenType.Identifier, `right side "${right}" of the expression "${left} ${type} ${right}"  must be a literal or identifier`)
+      assert(left.negated, `left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
+    case '||':
+    case '&&':
       this.left  = left
       this.right = right
       left.parent = this
       right.parent = this
       break
     case TokenType.Identifier:
+      this.value = left
+      break
     case TokenType.Literal:
       this.value = left
+
+      if (/^\d/.exec(this.value) !== null) this.typeOf = 1
+      else if (/^(true|false)/.exec(this.value) !== null) this.typeOf = 2
+      else if (/^(null)/.exec(this.value) !== null) this.typeOf = 3
+      else this.typeOf = 4
+
       break
     default: {
       throw new SyntaxError(`Unexpected type of Term "${type}"`)
@@ -80,14 +103,10 @@ Term.prototype.hasChildren = function () {
   return this.left !== null
 }
 
-Term.prototype.oppositeType = function () {
-  return operators.get(this.type)[0]
-}
-
 Term.prototype.deMorgen = function () {
   if (this.hasChildren()) {
     this.negate()
-    this.type = this.oppositeType()
+    this.type = operators.get(this.type)
 
     if (this.type === '&&' || this.type === '||') {
       this.left.negate()
@@ -139,7 +158,7 @@ Term.prototype.distributeDisjunction = function (isPerfect = false) {
     // (B || C)
     this.right = inject.equalTo(decompose.right) ? inject : new Term('||', decompose.right, inject)
 
-    if (isPerfect && inject.type === '&&') {
+    if (isPerfect && (inject.type === '&&' || decompose.left.type === '&&' || decompose.right.type === '&&')) {
       this.left.distributeDisjunction()
       this.right.distributeDisjunction()
     }
@@ -175,7 +194,7 @@ Term.prototype.distributeConjunction = function (isPerfect = false) {
     // (B && C)
     this.right = inject.equalTo(decompose.right) ? inject : new Term('&&', decompose.right, inject)
 
-    if (isPerfect && inject.type === '||') {
+    if (isPerfect && (inject.type === '||' || decompose.left.type === '||' || decompose.right.type === '||')) {
       this.left.distributeConjunction(isPerfect)
       this.right.distributeConjunction(isPerfect)
     }
@@ -214,83 +233,58 @@ Term.prototype.toString = function () {
   return this.stringExpression(this.type)
 }
 
-Term.prototype.traverse = function (terms, parentType = this.type, isRight = false) {
-  switch (this.type) {
-    case Token.LITERAL:
-    case TokenType.Identifier:
-      terms[this.type](parentType, this.value, this.negated, isRight)
-      break
-    default:
-      terms.operators(parentType, this.type, this.left, this.right, this.negated, isRight)
-
-      break
-  }
-}
-
-Term.prototype.toCustomPropertyValue = function () {
-  return this.stringCustomPropertyExpression(this.type)
-}
-
 Term.prototype.stringExpression = function (parentType) {
   switch (this.type) {
     case TokenType.Literal:
-      let prefix = ''
+      if (this.typeOf === 1) return this.negated ? '-' + this.value : this.value
+      if (this.typeOf === 2) return this.negated ? '!' + this.value : this.value
+      if (this.typeOf === 3) return `'${this.value}'`
+      if (this.typeOf === 4) return `'${this.value}'`
 
-      if (this.negated) {
-        if (/^\d/.exec(this.value) !== null) prefix = operators.get('-')[1]
-        else if (/^(true|false)/.exec(this.value) !== null) prefix = operators.get('!')[1]
-      }
-
-      return `${prefix}${this.value}`
+      return this.value
     case TokenType.Identifier:
-      return (this.negated ? operators.get('!')[1] : '') + this.value
+      return (this.negated ? '!' : '') + this.value
     default:
-      let str = `${this.left.stringExpression(this.type)} ${operators.get(this.type)[1]} ${this.right.stringExpression(this.type)}`
+      let str = `${this.left.stringExpression(this.type)} ${this.type} ${this.right.stringExpression(this.type)}`
 
       if (this.negated || this.type !== parentType) str = `(${str})`
 
-      return (this.negated ? operators.get('!')[1] : '') + str
+      return (this.negated ? '!' : '') + str
+  }
+}
+
+Term.prototype.toPrimitive = function () {
+  switch (this.type) {
+    case TokenType.Literal:
+      if (this.typeOf === 1) return this.negated ? -this.value : +this.value
+      if (this.typeOf === 2) return this.value === 'true' ? this.negated ? false : true : this.negated ? true : false
+      if (this.typeOf === 3) return this.negated ? true : null
+      if (this.typeOf === 4) {
+        if (this.value === '') return this.negated ? true : `''`
+        return this.negated ? false : `'${this.value}'`
+      }
+    case TokenType.Identifier:
+      return this.negated ? '!' + this.value : this.value
+    default:
+      assert(true, `type "${this.type}" can't be primitive`)
   }
 }
 
 Term.prototype.execute = function (params) {
   switch (this.type) {
     case TokenType.Literal:
-      if (/^\d/.exec(this.value) !== null) return this.negated ? -parseFloat(this.value) : parseFloat(this.value)
-      
+      if (this.typeOf === 1) return this.negated ? -parseFloat(this.value) : parseFloat(this.value)
       if (this.value === 'true') return this.negated ? false : true
       if (this.value === 'false') return this.negated ? true : false
-      if (this.value === 'null') return this.negated ? true : null
+      if (this.typeOf === 3) return this.negated ? true : null
 
-      return this.value
+      return `'${this.value}'`
     case TokenType.Identifier:
       return this.negated ? !params[this.value] : params[this.value]
     default: {
       const result = eval(`${this.left.execute(params)} ${this.type} ${this.left.execute(params)}`)
       return this.negated ? !result : result
     }
-  }
-}
-
-Term.prototype.stringExpression = function (parentType) {
-  switch (this.type) {
-    case TokenType.Literal:
-      let prefix = ''
-
-      if (this.negated) {
-        if (/^\d/.exec(this.value) !== null) prefix = operators.get('-')[1]
-        else if (/^(true|false)/.exec(this.value) !== null) prefix = operators.get('!')[1]
-      }
-
-      return `${prefix}${this.value}`
-    case TokenType.Identifier:
-      return (this.negated ? operators.get('!')[1] : '') + this.value
-    default:
-      let str = `${this.left.stringExpression(this.type)} ${operators.get(this.type)[1]} ${this.right.stringExpression(this.type)}`
-
-      if (this.negated || this.type !== parentType) str = `(${str})`
-
-      return (this.negated ? operators.get('!')[1] : '') + str
   }
 }
 
@@ -304,46 +298,8 @@ Term.prototype.clone = function () {
   }
 
   return this.negated ? term.negate() : term
-};
-
-
-Term.prototype.stringCustomPropertyExpression = function (parentType, isRight = false) {
-  var str
-
-  switch (this.type) {
-    case Token.LITERAL:
-      str = `${this.negated ? '-' : ''}${this.value}`
-      break
-    case TokenType.Identifier:
-      str = `${this.negated ? 'not-' : ''}${this.value}`
-      str = parentType === '||' ? `var(--${str})` :
-            parentType === '&&' ? `var(--${str}${isRight ? ')': ''}` :
-            str
-      break
-    case '&&':
-      str =
-        this.left.stringCustomPropertyExpression(this.type) +
-        ',' +
-        this.right.stringCustomPropertyExpression(this.type, true) + ')'
-      break
-    case '||':
-      str =
-        this.left.stringCustomPropertyExpression(this.type) +
-        ' ' +
-        this.right.stringCustomPropertyExpression(this.type, true)
-      break
-    default:
-      str =
-        this.left.stringCustomPropertyExpression(this.type) +
-        Token[this.type][2] +
-        this.right.stringCustomPropertyExpression(this.type, true)
-      str = `var(--${str})`
-      break
-  }
-
-  return str
 }
 
-export const Literal = (value) => new Term(TokenType.Literal, value)
-export const Identifier = (value) => new Term(TokenType.Identifier, value)
+export const L = (value) => new Term(TokenType.Literal, value)
+export const I = (value) => new Term(TokenType.Identifier, value)
 export const Ex = (op, left, right) => new Term(op, left, right)
