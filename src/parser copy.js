@@ -151,15 +151,10 @@ export class Parser {
 
         break
       }
-      case '!': {
-        this.eat('!')
-        left = this.PrecedenceExpression(this.getPrecedence('!')).negate()
-        break
-      }
+      case '!':
       case '-': {
-        this.eat('-')
-        left = this.PrecedenceExpression(this.getPrecedence('-'))
-        left.value = left.value[0] === '-' ? left.value.slice(1) : '-' + left.value
+        const operator = this.eat(this.lookahead.type).type
+        left = this.PrecedenceExpression(this.getPrecedence(operator)).negate()
         break
       }
       default: {
@@ -414,55 +409,83 @@ export class Parser {
     return operatorStringType.get(operator) || operator
   }
 
-  termName(termExpression) {
-    let result = termExpression.toString((term) => {
-      switch (term.type) {
-        case TokenType.Identifier:
-          if (term.parent === null) this.scheme.addRule(term.value, '!', term.negated)
-          break
-        case '||':
-        case '&&':
-          if (term.left.type === TokenType.Identifier) this.scheme.addRule(term.left.value, '!', term.left.negated)
-          if (term.right.type === TokenType.Identifier) this.scheme.addRule(term.right.value, '!', term.right.negated)
-          break
-        case TokenType.Literal: break
-        default:
-          this.scheme.addRule(term.left.value, term.type, term.right.toString())
-          break
-      }
-    })
+  termName(term) {
+    switch (term.type) {
+      case TokenType.Literal:
+        if (term.typeOf === 1) return term.negated ? this.replaceTermOperator('-') + term.value : term.value
+  
+        return term.value
+      case TokenType.Identifier:
+        if (term.parent === null) this.scheme.addListRule(term.value, 'bool', term.negated)
+        return term.negated ? this.replaceTermOperator('!') + term.value : term.value
+      default: {
+        switch (term.type) {
+          case '||':
+          case '&&':
+            if (term.left.type === TokenType.Identifier) this.scheme.addListRule(term.left.value, 'bool', term.left.negated)
+            if (term.right.type === TokenType.Identifier) this.scheme.addListRule(term.right.value, 'bool', term.right.negated)
+            break;
+          default:
+            this.scheme.addListRule(term.left.value, term.type, term.right.toPrimitive())
+            break;
+        }
 
-    return this.scheme.replaceOperators(result)
+        let str = `${this.termName(term.left)}${this.replaceTermOperator(term.type)}${this.termName(term.right)}`
+  
+        if (term.negated || term.type !== (term.parent?.type || term.type)) str = `${this.replaceTermOperator('(')}${str}${this.replaceTermOperator(')')}`
+  
+        return (term.negated ? this.replaceTermOperator('!') + str : str)
+      }
+    }
   }
 
   termValue(term, parentType) {
     switch (term.type) {
-      case TokenType.Literal: return term.toBoolean() ? 'var(--true)' : 'var(--false)' 
-      case TokenType.Identifier: return `var(--${this.scheme.replaceOperators(term.toString())})`
-    
-      case '||': {
-        const left = this.termValue(term.left, term.type)
-        const right = this.termValue(term.right, term.type)
+      case TokenType.Literal:
+        if (parentType === '||' || parentType === '&&') {
+          let alternate = 'var(--OFF)'
+          let consequent = 'var(--ON)'
 
-        return `${left} ${right}`
+          if (term.typeOf === 1) return term.value === '0' ? alternate : consequent
+
+          if (term.negated) [alternate, consequent] = [consequent, alternate]
+
+          if (term.typeOf === 4) return term.value === '' ? alternate : consequent
+          if (term.typeOf === 3) return alternate
+          if (term.typeOf === 2) return term.value === 'true' ? consequent : alternate      
+        }
+
+        if (term.typeOf === 1) return term.negated ? this.replaceTermOperator('-') + term.value : term.value
+  
+        return term.negated ? this.replaceTermOperator('!') + term.value : term.value
+      case TokenType.Identifier: {
+        let result = `${term.negated ? this.replaceTermOperator('!') : ''}${term.value}`
+
+        if (parentType === '||' || parentType === '&&') result = `var(--${result})`
+
+        return result
       }
+      case '||':
       case '&&': {
         const left = this.termValue(term.left, term.type)
         const right = this.termValue(term.right, term.type)
 
+        if (term.type === '||') return `${left} ${right}`
+
         let result = `${left}, ${right}`
 
         if (parentType !== '&&') {
-          let endBracket = ''
-          result = result.replace(/\),/g, () => { endBracket += ')'; return ',' }) + endBracket
+          let postfix = ''
+          result = result.replace(/\),/g, () => {postfix += ')'; return ','}) + postfix
         }
 
         return result
       }
       default: {
-        let result = this.scheme.replaceOperators(`${term.left.toString()}${term.type}${term.right.toString()}`)
-        
-        return `var(--${result})`
+        const left = this.termValue(term.left, term.type)
+        const right = this.termValue(term.right, term.type)
+
+        return `var(--${left}${this.replaceTermOperator(term.type)}${right})`
       }
     }
   }

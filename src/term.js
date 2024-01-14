@@ -1,6 +1,6 @@
 import { TokenType } from './scanner'
 
-const operators = new Map([
+const oppositeOperators = new Map([
   [ "||", '&&' ],
   [ "&&", '||' ],
   [ "==", '!=' ],
@@ -9,8 +9,6 @@ const operators = new Map([
   [ ">",  '<=' ],
   [ "<=", '>'  ],
   [ ">=", '<'  ],
-  [ "-",  '-'  ],
-  [ "!",  '!'  ],
 ])
 
 const assert = (cond, message) => { if (cond) throw new SyntaxError(message) }
@@ -21,12 +19,20 @@ export function Term(type, left, right) {
   this.left = null
   this.right = null
   this.value = null
-  this.parent = null
-  // 1 - number 2- boolean 3 - null 4 - string
-  this.typeOf = 0 
 
-  // TODO: Проверка при создании выражений X .. number что левая часть это identifier а правая число
   switch (type) {
+    case TokenType.Identifier: {
+      this.value = left
+
+      return this
+    }
+    case TokenType.Literal: {
+      this.value = left
+
+      if (/^true|false|null|-?\d|'/.exec(this.value) === null) this.value = `'${this.value}'`
+
+      return this
+    }
     case '==':
       if (left.type === TokenType.Identifier) {
         assert(left.negated, `left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
@@ -53,7 +59,7 @@ export function Term(type, left, right) {
           this.value = left.value
           break
         }
-        // A != true -> !A 
+        // A != true -> !A
         if (right.value === 'true') {
           this.type = TokenType.Identifier
           this.value = left.value
@@ -68,25 +74,58 @@ export function Term(type, left, right) {
       assert(left.type !== TokenType.Identifier, `left side "${left}" of the expression "${left} ${type} ${right}"  must be an identifier`)
       assert(right.type !== TokenType.Literal && right.type !== TokenType.Identifier, `right side "${right}" of the expression "${left} ${type} ${right}"  must be a literal or identifier`)
       assert(left.negated, `left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
-    case '||':
-    case '&&':
       this.left  = left
       this.right = right
-      left.parent = this
-      right.parent = this
       break
-    case TokenType.Identifier:
-      this.value = left
+    case '||': {
+      const leftBool = left.toBoolean()
+      const rightBool = right.toBoolean()
+      // TruthyTerm || TruthyTerm -> true
+      if (leftBool === true || rightBool === true) {
+        return new Term(TokenType.Literal, 'true')
+      }
+      // FalsyTerm || FalsyTerm -> false
+      if (leftBool === false && rightBool === false) {
+        return new Term(TokenType.Literal, 'false')
+      }
+      // X || FalsyTerm -> X
+      if (left.type === TokenType.Identifier && rightBool === false) {
+        return left
+      }
+      // FalsyTerm && X -> X
+      if (right.type === TokenType.Identifier && leftBool === false) {
+        return right
+      }
+      this.left  = left
+      this.right = right
       break
-    case TokenType.Literal:
-      this.value = left
+    }
 
-      if (/^\d/.exec(this.value) !== null) this.typeOf = 1
-      else if (/^(true|false)/.exec(this.value) !== null) this.typeOf = 2
-      else if (/^(null)/.exec(this.value) !== null) this.typeOf = 3
-      else this.typeOf = 4
+    case '&&': {
+      const leftBool = left.toBoolean()
+      const rightBool = right.toBoolean()
+      // X && FalsyTerm -> false
+      // FalsyTerm && X -> false
+      if (leftBool === false || rightBool === false) {
+        return new Term(TokenType.Literal, 'false')
+      }
+      // TruthyTerm && TruthyTerm -> true
+      if (leftBool === true && rightBool === true) {
+        return new Term(TokenType.Literal, 'true')
+      }
+      // X && TruthyTerm -> X
+      if (left.type === TokenType.Identifier && rightBool) {
+        return left
+      }
+      // TruthyTerm && X -> X
+      if (right.type === TokenType.Identifier && leftBool) {
+        return right
+      }
 
+      this.left  = left
+      this.right = right
       break
+    }
     default: {
       throw new SyntaxError(`Unexpected type of Term "${type}"`)
     }
@@ -94,7 +133,12 @@ export function Term(type, left, right) {
 }
 
 Term.prototype.negate = function () {
-  this.negated = !this.negated
+  if (this.type === TokenType.Literal) {
+    if (/^false|null|''|0$/.exec(this.value) !== null) { this.value = 'true'; return this }
+    if (/^true|-?\d|'/.exec(this.value) !== null) { this.value = 'false'; return this }
+  } else {
+    this.negated = !this.negated
+  }
 
   return this
 }
@@ -106,7 +150,7 @@ Term.prototype.hasChildren = function () {
 Term.prototype.deMorgen = function () {
   if (this.hasChildren()) {
     this.negate()
-    this.type = operators.get(this.type)
+    this.type = oppositeOperators.get(this.type)
 
     if (this.type === '&&' || this.type === '||') {
       this.left.negate()
@@ -118,7 +162,7 @@ Term.prototype.deMorgen = function () {
 }
 
 // !(A || (B && C)) -> !A && !B || !C
-// !(A || (B > 1)) -> !A && !(B > 1)
+// !(A || (B > 1)) -> !A && (B <= 1)
 // Negation Normal Form
 Term.prototype.toNNF = function () {
   if (this.negated) this.deMorgen()
@@ -229,56 +273,41 @@ Term.prototype.equalTo = function (term) {
   return true
 }
 
-Term.prototype.toString = function () {
-  return this.stringExpression(this.type)
+Term.prototype.toString = function (visitor) {
+  return this.stringExpression(this.type, visitor)
 }
 
-Term.prototype.stringExpression = function (parentType) {
+Term.prototype.stringExpression = function (parentType, visitor) {
+  if (visitor) visitor(this)
+
   switch (this.type) {
-    case TokenType.Literal:
-      if (this.typeOf === 1) return this.negated ? '-' + this.value : this.value
-      if (this.typeOf === 2) return this.negated ? '!' + this.value : this.value
-      if (this.typeOf === 3) return `'${this.value}'`
-      if (this.typeOf === 4) return `'${this.value}'`
-
-      return this.value
-    case TokenType.Identifier:
-      return (this.negated ? '!' : '') + this.value
+    case TokenType.Literal: return this.value
+    case TokenType.Identifier: return this.negated ? `!${this.value}` : this.value
     default:
-      let str = `${this.left.stringExpression(this.type)} ${this.type} ${this.right.stringExpression(this.type)}`
+      let str = `${this.left.stringExpression(this.type, visitor)}${this.type}${this.right.stringExpression(this.type, visitor)}`
 
-      if (this.negated || this.type !== parentType) str = `(${str})`
+      if (this.negated || (this.type !== parentType && (this.type === '||'))) str = `(${str})`
 
-      return (this.negated ? '!' : '') + str
+      return this.negated ? `!${str}` : str
   }
 }
 
-Term.prototype.toPrimitive = function () {
-  switch (this.type) {
-    case TokenType.Literal:
-      if (this.typeOf === 1) return this.negated ? -this.value : +this.value
-      if (this.typeOf === 2) return this.value === 'true' ? this.negated ? false : true : this.negated ? true : false
-      if (this.typeOf === 3) return this.negated ? true : null
-      if (this.typeOf === 4) {
-        if (this.value === '') return this.negated ? true : `''`
-        return this.negated ? false : `'${this.value}'`
-      }
-    case TokenType.Identifier:
-      return this.negated ? '!' + this.value : this.value
-    default:
-      assert(true, `type "${this.type}" can't be primitive`)
+Term.prototype.toBoolean = function () {
+  if (this.type === TokenType.Literal) {
+    let value = true
+
+    if(this.value === `''` || this.value === '0' || this.value === 'null' || this.value === 'false') value = false
+  
+    return value
   }
+
+  return null
 }
 
 Term.prototype.execute = function (params) {
   switch (this.type) {
     case TokenType.Literal:
-      if (this.typeOf === 1) return this.negated ? -parseFloat(this.value) : parseFloat(this.value)
-      if (this.value === 'true') return this.negated ? false : true
-      if (this.value === 'false') return this.negated ? true : false
-      if (this.typeOf === 3) return this.negated ? true : null
-
-      return `'${this.value}'`
+      return this.stringExpression(null)
     case TokenType.Identifier:
       return this.negated ? !params[this.value] : params[this.value]
     default: {
