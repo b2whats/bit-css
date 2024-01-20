@@ -14,21 +14,6 @@ const operators = new Map([
   [ "!",  4 ],
 ])
 
-const operatorStringType = new Map([
-  [ "||", '⋁' ],
-  [ "&&", '∧' ],
-  [ "==", '≡' ],
-  [ "!=", '≠' ],
-  [ "<",  '⋖' ],
-  [ ">",  '⋗' ],
-  [ "<=", '⋜' ],
-  [ ">=", '⋝' ],
-  [ "-",  '-' ],
-  [ "!",  '¬' ],
-  [ "(",  '∣' ],
-  [ ")",  '∣' ],
-])
-
 export class Parser {
   keywords = 'if|match|token'
 
@@ -120,7 +105,6 @@ export class Parser {
     this.eat(')', false)
 
     return this.IfSerialize(test, consequent, alternate)
-    // return `if([${test}],[${consequent}]${alternate ? `,[${alternate}]` : ''})`
   }
 
   MixedExpression(stopTokens) {
@@ -386,48 +370,44 @@ export class Parser {
         if (alternate) {
           const alternateTerm = term.clone().negate().toNNF()
           this.termName(alternateTerm)
-          const elseName = `--else-${name}`
           const elseValue = this.termValue(alternateTerm.distributeConjunction(true), null)
-          this.scheme.addDeclaration(elseName, elseValue)
+          const elseName = `else-${name}`
+          this.scheme.addPreparedCondition(elseName, elseValue)
     
-          result = ` var(${elseName},${alternate})`
+          result = ` var(--${elseName},${alternate})`
         }
     
-        const ifName = `--if-${name}`
         const ifValue = this.termValue(term.toDNF(true), null)
-        this.scheme.addDeclaration(ifName, ifValue)
-        result = `var(${ifName},${consequent})` + result
+        const ifName = `if-${name}`
+        this.scheme.addPreparedCondition(ifName, ifValue)
+        result = `var(--${ifName},${consequent})` + result
         
         return result
       }
       default: {
         let result = `var(--${this.termName(term)},${consequent})`
 
-        if (alternate !== null) result += ` var(--${this.termName(term.negate())},${alternate})`
+        if (alternate !== null) result += ` var(--${this.termName(term.negate().toNNF())},${alternate})`
         
         return result
       }
     }
   }
 
-  replaceTermOperator(operator) {
-    return operatorStringType.get(operator) || operator
-  }
-
   termName(termExpression) {
     let result = termExpression.toString((term) => {
       switch (term.type) {
         case TokenType.Identifier:
-          if (term.parent === null) this.scheme.addRule(term.value, '!', term.negated)
+          if (term.parent === null) this.scheme.addCondition(term.value, '!', term.negated)
           break
         case '||':
         case '&&':
-          if (term.left.type === TokenType.Identifier) this.scheme.addRule(term.left.value, '!', term.left.negated)
-          if (term.right.type === TokenType.Identifier) this.scheme.addRule(term.right.value, '!', term.right.negated)
+          if (term.left.type === TokenType.Identifier) this.scheme.addCondition(term.left.value, '!', term.left.negated)
+          if (term.right.type === TokenType.Identifier) this.scheme.addCondition(term.right.value, '!', term.right.negated)
           break
         case TokenType.Literal: break
         default:
-          this.scheme.addRule(term.left.value, term.type, term.right.toString())
+          this.scheme.addCondition(term.left.value, term.type, term.right.toString())
           break
       }
     })

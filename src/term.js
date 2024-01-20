@@ -19,6 +19,7 @@ export function Term(type, left, right) {
   this.left = null
   this.right = null
   this.value = null
+  this.commonType = false
 
   switch (type) {
     case TokenType.Identifier: {
@@ -27,57 +28,35 @@ export function Term(type, left, right) {
       return this
     }
     case TokenType.Literal: {
+      if (/^Boolean|Function|String|Number/.exec(left) !== null) {
+        this.commonType = true
+        this.value = left
+        
+        return this
+      }
       this.value = left
-
       if (/^true|false|null|-?\d|'/.exec(this.value) === null) this.value = `'${this.value}'`
 
       return this
     }
     case '==':
-      if (left.type === TokenType.Identifier) {
-        assert(left.negated, `left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
-        // A == true -> A 
-        if (right.value === 'true') {
-          this.type = TokenType.Identifier
-          this.value = left.value
-          break
-        }
-        // A == false -> !A
-        if (right.value === 'false') {
-          this.type = TokenType.Identifier
-          this.value = left.value
-          this.negated = true
-          break
-        }
-      }
+      if (right.commonType && right.negated) { this.type = '!='; right.negated = false }
     case '!=':
-      if (left.type === TokenType.Identifier) {
-        assert(left.negated, `left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
-        // A != false -> A
-        if (right.value === 'false') {
-          this.type = TokenType.Identifier
-          this.value = left.value
-          break
-        }
-        // A != true -> !A
-        if (right.value === 'true') {
-          this.type = TokenType.Identifier
-          this.value = left.value
-          this.negated = true
-          break
-        }
-      }
+      if (right.commonType && right.negated) { this.type = '=='; right.negated = false }
     case '>':
     case '<':
     case '>=':
     case '<=':
-      assert(left.type !== TokenType.Identifier, `left side "${left}" of the expression "${left} ${type} ${right}"  must be an identifier`)
-      assert(right.type !== TokenType.Literal && right.type !== TokenType.Identifier, `right side "${right}" of the expression "${left} ${type} ${right}"  must be a literal or identifier`)
-      assert(left.negated, `left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
+      assert(left.type !== TokenType.Identifier, `Left side "${left}" of the expression "${left} ${type} ${right}"  must be an identifier`)
+      assert(left.negated, `Left side "${left}" of the expression "${left} ${type} ${right}" mustn't be negated`)
+      assert(right.type !== TokenType.Literal && right.type !== TokenType.Identifier, `Right side "${right}" of the expression "${left} ${type} ${right}"  must be a literal or identifier`)
+      assert(type !== '==' && type !== '!=' && right.commonType, `Object or primitive type cannot be used in expression "${left} ${type} ${right}"`)
+
       this.left  = left
       this.right = right
       break
     case '||': {
+      assert(left.commonType || right.commonType, `Object or primitive type cannot be used in expression "${left} ${type} ${right}"`)
       const leftBool = left.toBoolean()
       const rightBool = right.toBoolean()
       // TruthyTerm || TruthyTerm -> true
@@ -102,6 +81,7 @@ export function Term(type, left, right) {
     }
 
     case '&&': {
+      assert(left.commonType || right.commonType, `Object or primitive type cannot be used in expression "${left} ${type} ${right}"`)
       const leftBool = left.toBoolean()
       const rightBool = right.toBoolean()
       // X && FalsyTerm -> false
@@ -136,6 +116,7 @@ Term.prototype.negate = function () {
   if (this.type === TokenType.Literal) {
     if (/^false|null|''|0$/.exec(this.value) !== null) { this.value = 'true'; return this }
     if (/^true|-?\d|'/.exec(this.value) !== null) { this.value = 'false'; return this }
+    this.negated = !this.negated
   } else {
     this.negated = !this.negated
   }
@@ -281,7 +262,7 @@ Term.prototype.stringExpression = function (parentType, visitor) {
   if (visitor) visitor(this)
 
   switch (this.type) {
-    case TokenType.Literal: return this.value
+    case TokenType.Literal:
     case TokenType.Identifier: return this.negated ? `!${this.value}` : this.value
     default:
       let str = `${this.left.stringExpression(this.type, visitor)}${this.type}${this.right.stringExpression(this.type, visitor)}`
@@ -311,7 +292,17 @@ Term.prototype.execute = function (params) {
     case TokenType.Identifier:
       return this.negated ? !params[this.value] : params[this.value]
     default: {
-      const result = eval(`${this.left.execute(params)} ${this.type} ${this.left.execute(params)}`)
+      let left = this.left.execute(params)
+      let right = this.right.execute(params)
+      let type = this.type === '==' || this.type === '!=' ? this.type + '=' : this.type
+
+      if (this.right.commonType) {
+        left = `typeof ${left}`
+        right = `'${right.toLowerCase()}'`
+      }
+
+      const result = eval(`${left} ${type} ${right}`)
+
       return this.negated ? !result : result
     }
   }

@@ -35,7 +35,7 @@ export class Scanner {
   cursor = 0
   length = 0
   charCode = 0
-  primitive = /true|false|null/
+  primitive = /true|false|null|Boolean|Function|String|Number/
   buffer = new Uint8Array(0)
   charCodeKeys = charCodeKeys
 

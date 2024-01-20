@@ -1,14 +1,17 @@
+import { hash } from './hash'
 export class Scheme {
   on = 'initial'
   off = ' '
-  name = ''
-  variables = {}
-  declarations = {}
+  className = ''
   rules = {}
-  buffer = ''
+  conditions = {}
+  preparedConditions = new Map()
+  buffer = new Map()
+  cache = new Map()
+  variables = new Set()
 
   constructor(name) {
-    this.name = name
+    this.className = `.${name}` 
     this.operatorsRe = /\|\||&&|==|!=|<=|>=|<|>|-|!|'|\(|\)/g
   }
 
@@ -35,157 +38,226 @@ export class Scheme {
     return value.replace(this.operatorsRe, this.operatorsMap)
   }
 
-  addDeclaration(name, value) {
-    this.declarations[name] = value
+  addPreparedCondition(name, value) {
+    this.preparedConditions.set(name, value)
   }
 
-  addRule(name, type, value) {
-    if (this.variables[name] === undefined) {
-      this.variables[name] = {}
+  addCondition(name, operator, value) {
+    if (this.conditions[name] === undefined) {
+      this.conditions[name] = {}
     }
 
-    if (this.variables[name][type] === undefined) {
-      this.variables[name][type] = new Set()
+    if (this.conditions[name][operator] === undefined) {
+      this.conditions[name][operator] = new Set()
     }
 
-    this.variables[name][type].add(value)
+    this.conditions[name][operator].add(value)
   }
 
-  flushBuffer() {
-    const result = this.buffer
-    this.buffer = ''
+  makeInitialRule() {
+    let result = ''
+
+    return [
+      (variable, value) => {
+        result += `--${variable}:${value};\r\n`
+      },
+      () => {
+        this.className = `${this.className}-${hash(result)}`
+        this.buffer.set(this.className, `{${result}}`)
+      }
+    ]
+  }
+
+  templateCacheKey(variable) {
+    let body, args
+    if (Array.isArray(variable)) {
+      args = `{${variable.join(',')}}`
+      body = variable.map(name => `${name}:\${${name}}`).join(' ')
+    } else {
+      args = variable
+      body = `${variable}:\${${variable}}`
+    }
+
+    return new Function(args, `return \`${body}\``)
+  }
+
+  ruleClassName(value) {
+    return `${this.className}[data-props~="${value}"]`
+  }
+
+  dependenciesRuleClassName(variable, prefix, value) {
+    return `${prefix}[data-${variable}-deps="${value}"]`
+  }
+
+  makeRuleFunctions(variable) {
+    let body = `let result = ''\r\n`
+    let bodyDependencies = body
+    let dependencies = new Set()
+    this.variables.add(variable)
+
+    return [(operator, value) => {
+      switch (operator) {
+        case '!':
+          if (value.has(true))  body += `if (${variable})  result += '--${variable}:${this.on};'\r\n`
+          if (value.has(false)) body += `if (!${variable}) result += '--${this.operatorsMap(operator)}${variable}:${this.off};'\r\n`
+          break
+        default: {
+          const variableName = `${variable}${this.operatorsMap(operator)}${this.replaceOperators(value)}`
+          let identifier = false
+          let left = variable
+          if (operator === '==' || operator === '!=') operator += '='
+
+          if (/^Number|String|Function|Boolean$/.exec(value) !== null) {
+            left = `typeof ${variable}`
+            value = `'${value.toLowerCase()}'`
+          } else if (/^true|false|null|-?\d|'/.exec(value) === null) {
+            const name = value.startsWith('!') ? value.slice(1) : value
+            this.variables.add(name)
+            variable !== name && dependencies.add(name)
+            identifier = true
+          }
+
+          let tmp = `if (${left} ${operator} ${value}) result += '--${variableName}:${this.on};'\r\n`
+
+          if (identifier) bodyDependencies += tmp
+          else body += tmp
+          break
+        }
+      }},
+      () => {
+        body += `if (result === '') return null\r\n`
+        body += `return '{' + result + '}'`
+
+        this.rules[variable] = new Function(variable, body)
+        this.rules[variable].cacheKey = this.templateCacheKey(variable)
+
+        if (dependencies.size !== 0) {
+          dependencies = [...dependencies]
+          bodyDependencies += `if (result === '') return null\r\n`
+          bodyDependencies += `return '{' + result + '}'`
+
+          this.rules[variable].dependence = new Function(`{${variable},${dependencies.join(',')}}`, bodyDependencies)
+          this.rules[variable].dependence.cacheKey = this.templateCacheKey(dependencies)
+        }
+      }
+    ]
+  }
+
+  prepareStyles() {
+    const [addDeclaration, flushRule] = this.makeInitialRule()
+
+    for (const [cssVariable, value] of this.preparedConditions) {
+      addDeclaration(cssVariable, value)
+    }
+    const rules = []
+    for (const [variable, operatorList] of Object.entries(this.conditions)) {
+      const [addCondition, createFunction] = this.makeRuleFunctions(variable)
+      for (const [operator, values] of Object.entries(operatorList)) {
+        switch (operator) {
+          case '!':
+            if (values.has(true)) {
+              addDeclaration(variable, this.off)
+            }
+            if (values.has(false)) {
+              addDeclaration(this.operatorsMap(operator) + variable, this.on)
+            }
+            addCondition(operator, values)
+            break
+          default: {
+            const leftSide = variable + this.operatorsMap(operator)
+
+            values.forEach(value => {
+              addDeclaration(`${leftSide}${this.replaceOperators(value)}`, this.off)
+              addCondition(operator, value)
+            })
+            break
+          }
+        }
+      }
+      rules.push(createFunction)
+    }
+
+    flushRule()
+    rules.forEach(fn => fn())
+  }
+
+
+  prepareRules(properties) {
+    for (const [property, values] of Object.entries(properties)) {
+      const fn = this.rules[property]
+      if (fn) {
+        values.forEach(v => {
+          if (typeof v === 'object') {
+            this.serialize(v)
+          } else {
+            this.serialize({ [property]: v })
+          }
+        })
+      } else {
+        throw new SyntaxError(`Variable "${property}" does not participate in the formation of style for the selector "${this.className}"`)
+      }
+    }
+  }
+
+  valuePropertiesStringify(properties) {
+    const result = {}
+
+    this.variables.forEach(name => {
+      const value = properties[name]
+      result[name] = (
+        value === undefined ? 'none' :
+        typeof value === 'function' ? 'fn' :
+        value
+      )
+    })
 
     return result
   }
 
-  addProperty(property, value) {
-    if (property.startsWith('--') === false) property = '--' + property
+  serialize(properties) {
+    const result = {
+      'data-props': ''
+    }
+    const stringifyProperties = this.valuePropertiesStringify(properties)
 
-    this.buffer += `${property}:${value};\r\n`
-  }
+    for (const name in properties) {
+      const make = this.rules[name]
 
-  createRuleFunction() {
-    let fnBody = `let result = ''\r\n`
+      if (make) {
+        const value = properties[name]
+        if (value === undefined) continue
+        const cacheKey = make.cacheKey(stringifyProperties[name])
+        let parentCache = this.cache.get(cacheKey)
 
-    return (variable, operator, value) => {
-      if (variable === undefined) {
-        console.log(fnBody)
-      } else {
-        switch (operator) {
-          case '!':
-            fnBody += `const booleanValue = !!${variable}\r\n`
-            if (value === true)  fnBody += `if (booleanValue === true)  result += '--${variable}:${this.on};'\r\n`
-            if (value === false) fnBody += `if (booleanValue === false) result += '--${this.operatorsMap(operator)}${variable}:${this.off};'\r\n`
-            break
-          case '==': {
-            const variableName = `${variable}${this.operatorsMap(operator)}${this.replaceOperators(value)}`
-
-            if (/^true|false|null|-?\d|'/.exec(value) === null) {
-              value = value.replace(/!/, '!props.') || `props.${value}`
-            }
-
-            fnBody += `if (props.${variable} ${operator}= ${value}) result += '--${variableName}:${this.on};'\r\n`
-            fnBody += `else result += '--${variableName}:${this.off};'\r\n`
-
-            break
+        if (parentCache === undefined) {
+          const declarations = make(value)
+          if (declarations !== null) {
+            this.buffer.set(this.ruleClassName(cacheKey), declarations)
           }
-          default: {
-            const variableName = `${variable}${this.operatorsMap(operator)}${this.replaceOperators(value)}`
-            const isEqualOperator = operator === '==' || operator === '!='
-            isEqualOperator && (operator += '=')
+          parentCache = new Set()
+          this.cache.set(cacheKey, parentCache)
+        }
 
-            if (/^true|false|null|-?\d|'/.exec(value) === null) {
-              value = value.replace(/!/, '!props.') || `props.${value}`
+        result['data-props'] += cacheKey + ' '
+
+        if (make.dependence) {
+          const depsCacheKey = make.dependence.cacheKey(stringifyProperties)
+
+          if (parentCache.has(depsCacheKey) === false) {
+            const declarations = make.dependence(properties)
+            if (declarations !== null) {
+              const className = this.dependenciesRuleClassName(name, this.ruleClassName(cacheKey), depsCacheKey)
+              this.buffer.set(className, declarations)
             }
-
-            fnBody += `if (props.${variable} ${operator} ${value}) result += '--${variableName}:${this.on};'\r\n`
-
-            if (isEqualOperator) fnBody += `else result += '--${variableName}:${this.off};'\r\n`
-
-            break
+            parentCache.add(depsCacheKey)
           }
+
+          result[`data-${name}-deps`] = depsCacheKey
         }
       }
     }
-  }
+    result['data-props'] = result['data-props'].trim()
 
-  makeInitialDeclarations() {
-    for (const [property, value] of Object.entries(this.declarations)) {
-      this.addProperty(property, value)
-    }
-
-    for (const [variable, operatorList] of Object.entries(this.variables)) {
-      for (const [operator, values] of Object.entries(operatorList)) {
-        let addCondition = this.createRuleFunction()
-        switch (operator) {
-          case '!':
-            if (values.has(true)) {
-              this.addProperty(variable, this.off)
-              addCondition(variable, operator, true)
-            }
-            if (values.has(false)) {
-              this.addProperty(this.operatorsMap(operator) + variable, this.on)
-              addCondition(variable, operator, true)
-            }
-            break
-          case '!=':
-          case '==':
-            const leftSide = variable + this.operatorsMap(operator)
-            let toggle = operator === '!=' ? this.on : this.off
-            values.forEach(value => {
-              if (/^true|false|null|-?\d|'/.exec(value) === null && !value.startsWith('!')) toggle = operator === '!=' ? this.off : this.on
-              this.addProperty(`${leftSide}${this.replaceOperators(value)}`, toggle)
-              addCondition(variable, operator, value)
-            })
-            break
-          default: {
-            const leftSide = variable + this.operatorsMap(operator)
-
-            values.forEach(value => {
-              this.addProperty(`${leftSide}${this.replaceOperators(value)}`, this.off)
-              addCondition(variable, operator, value)
-            })
-            break
-          }
-        }
-        addCondition()
-      }
-    }
-
-    return this.flushBuffer()
-  }
-
-  generateCreationRules() {
-    let fabric = {}
-    for (const [variable, operatorList] of Object.entries(this.variables)) {
-      let result = `let result = ''\r\n`
-      for (let [operator, values] of Object.entries(operatorList)) {
-        switch (operator) {
-          case '!':
-            if (values.has(true))  result += `if ('${variable}' in props) result += '--${variable}:${this.on};'\r\n`
-            if (values.has(false)) result += `if ('${variable}' in props === false) result += '--${this.operatorsMap(operator)}${variable}:${this.off};'\r\n`
-            break
-          default: {
-            values.forEach(value => {
-              if (/^true|false|null|-?\d|'/.exec(value) === null) {
-                value = value.replace(/!/, '!props.') || `props.${value}`
-              }
-              const variableName = `${variable}${this.operatorsMap(operator)}${this.replaceOperators(value)}`
-              result += `if (props.${variable} ${operator} ${value}) result += '--${variableName}:${this.on};'\r\n`
-
-              if (operator === '!=' || operator === '==') {
-                result += `else result += '--${variableName}:${this.off};'\r\n`
-              }
-            })
-            break
-          }
-        }
-      }
-      console.log(result)
-    }
-  }
-
-  createRule(name, value) {
-
+    return result
   }
 }
